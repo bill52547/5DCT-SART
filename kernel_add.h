@@ -1,0 +1,1 @@
+__global__ void kernel_add(cudaArray *proj1, cudaArray * proj, int iv, int na, int nb, float weight);
