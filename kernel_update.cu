@@ -1,10 +1,11 @@
-__global__ void kernel_update(cudaArray *img1, cudaArray *img, int nx, int ny, int nz, float lambda){
-    int x = blockSize.x * blockIdx.x + threadIdx.x;
-    int y = blockSize.y * blockIdx.y + threadIdx.y;
-    int z = blockSize.z * blockIdx.z + threadIdx.z;
-    if (x >= nx || y >= ny || z >= nz)
+__global__ void kernel_update(float *img1, float *img, int nx, int ny, int nz, float lambda){
+    int ix = 16 * blockIdx.x + threadIdx.x;
+    int iy = 16 * blockIdx.y + threadIdx.y;
+    int iz = 4 * blockIdx.z + threadIdx.z;
+    if (ix >= nx || iy >= ny || iz >= nz)
         return;
-    img1[x][y][z] -= lambda * img[x][y][z];
-    if (img1[x][y][z] < 0)
-        img1[x][y][z] = 0;
+    int id = ix + iy * nx + iz * nx * ny;
+    img1[id] -= lambda * img[id];
+    if (img1[id] < 0)
+        img1[id] = 0;
 }

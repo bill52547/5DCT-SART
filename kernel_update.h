@@ -1,1 +1,1 @@
-__global__ void kernel_update(cudaArray *img1, cudaArray *img, int nx, int ny, int nz, float lambda);
+__global__ void kernel_update(float *img1, float *img, int nx, int ny, int nz, float lambda);

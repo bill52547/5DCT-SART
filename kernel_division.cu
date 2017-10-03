@@ -1,12 +1,13 @@
-__global__ void kernel_division(cudaArray *img1, cudaArray *img, int nx, int ny, int nz)
+__global__ void kernel_division(float *img1, float *img, int nx, int ny, int nz)
 {
-    int x = blockSize.x * blockIdx.x + threadIdx.x;
-    int y = blockSize.y * blockIdx.y + threadIdx.y;
-    int z = blockSize.z * blockIdx.z + threadIdx.z;
-    if (x >= nx || y >= ny || z >= nz)
+    int ix = 16 * blockIdx.x + threadIdx.x;
+    int iy = 16 * blockIdx.y + threadIdx.y;
+    int iz = 4 * blockIdx.z + threadIdx.z;
+    if (ix >= nx || iy >= ny || iz >= nz)
         return;
-    if (img[x][y][z] == 0)
-        img1[x][y][z] = 0;
+    int id = ix + iy * nx + iz * nx * ny;
+    if (img[id] == 0)
+        img1[id] = 0;
     else
-        img1[x][y][z] /= img[x][y][z];
+        img1[id] /= img[id];
 }
