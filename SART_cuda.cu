@@ -10,6 +10,15 @@
 #include <iostream>
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[]){
 
+#include "kernel_add.h"
+#include "kernel_backprojection.h"
+#include "kernel_deformation.h"
+#include "kernel_division.h"
+#include "kernel_initial.h"
+#include "kernel_invertDVF.h"
+#include "kernel_projection.h"
+#include "kernel_update.h"
+
 // Macro for input and output
 #define IN_IMG prhs[0]
 #define PROJ prhs[1]
@@ -21,9 +30,11 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[]){
 // load parameters
 // assume all the parameter are orginized as:
 // dx = dy = dz = 1 
+// da = db
 
 // load geometry parameters, all need parameter for single view projection
 int nx, ny, nz, na, nb, numImg, numBytesImg, numSingleProj, numBytesSingleProj;
+float da, db, ai, bi;
 nx = (int)mxGetScalar(mxGetField(GEO_PARA, 0, "nx"));
 ny = (int)mxGetScalar(mxGetField(GEO_PARA, 0, "ny"));
 nz = (int)mxGetScalar(mxGetField(GEO_PARA, 0, "nz"));
@@ -33,10 +44,16 @@ na = (int)mxGetScalar(mxGetField(GEO_PARA, 0, "na"));
 nb = (int)mxGetScalar(mxGetField(GEO_PARA, 0, "nb"));
 numSingleProj = na * nb;
 numBytesSingleProj = numSingleProj * sizeof(float);
+da = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "da"));
+db = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "db"));
+ai = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "ai"));
+bi = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "bi"));
+SO = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "SO"));
+SD = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "SD"));
 
 // load iterating parameters, for the whole bin
 int n_view, n_iter, numProj, numBytesProj;
-float *mx, *my, *mz;
+float *mx, *my, *mz, angle;
 n_view = (int)mxGetScalar(mxGetField(ITER_PARA, 0, "nv"));
 n_iter = (int)mxGetScalar(mxGetField(ITER_PARA, 0, "n_iter"));
 mx = (float*)mxGetData(mxGetField(ITER_PARA, 0, "mx")); // index stead of difference
@@ -44,6 +61,7 @@ my = (float*)mxGetData(mxGetField(ITER_PARA, 0, "my"));
 mz = (float*)mxGetData(mxGetField(ITER_PARA, 0, "mz"));
 numProj = numSingleProj * n_view;
 numBytesProj = numProj * sizeof(float);
+angle = (float)mxGetScalar(mxGetField(ITER_PARA, 0, "angle"));
 
 // load initial guess of image
 float *h_img;
@@ -70,7 +88,7 @@ struct cudaExtent extent_singleProj = make_cudaExtent(na, nb, 1);
 
 // CUDA 3DArray Copy parameters
 cudaMemcpy3DParms copyParams = {0};
-copyParams.extent = extent_img;
+copyParams.extent = extent_proj;
 copyParams.kind = cudaMemcpyHostToDevice;
 
 // malloc in device: DVF for SINGLE view image from the bin
@@ -89,7 +107,7 @@ cudaMalloc3DArray(&d_proj, &channelDesc, extent_proj);
 
 // copy to device: projection of the whole bin
 cudaPitchedPtr projp;
-projp = make_cudaPitchedPtr((void*) proj, na * sizeof(float), nb, nv);
+projp = make_cudaPitchedPtr((void*) h_proj, na * sizeof(float), nb, nv);
 copyParams.srcPtr = projp;
 copyParams.dstArray = d_proj;
 cudaMemcpy3D(&copyParams);
@@ -104,7 +122,8 @@ cudaMalloc3DArray(&d_img, &channelDesc, extent_img);
 
 // copy to device: initial guess of image
 cudaPitchedPtr imgp;
-imgp = make_cudaPitchedPtr((void*) img, nx * sizeof(float), ny, nz);
+imgp = make_cudaPitchedPtr((void*) h_img, nx * sizeof(float), ny, nz);
+copyParams.extent = extent_img;
 copyParams.srcPtr = imgp;
 copyParams.dstArray = d_img;
 cudaMemcpy3D(&copyParams);
@@ -194,7 +213,7 @@ for (int iter = 0; iter < n_iter; i++){ // iteration
         cudaDeviceSynchronize();
 
         // backprojecting the difference of projections
-        kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2); // TBD
+        kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
         cudaDeviceSynchronize();
 
         // Create texture object tex_img1
@@ -208,9 +227,9 @@ for (int iter = 0; iter < n_iter; i++){ // iteration
         // calculate the ones backprojection data
         kernel_kernel<<<gridSize_img, blockSize>>>(d_singleViewImg1, nx, ny, nz, 1);
         cudaDeviceSynchronize();
-        kernel_projection<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_singleViewImg1); // TBD
+        kernel_projection<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_singleViewImg1, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
         cudaDeviceSynchronize();
-        kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2); // TBD
+        kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
         cudaDeviceSynchronize();
 
         // weighting
@@ -234,10 +253,16 @@ cudaFreeArray(d_mz);
 cudaFreeArray(d_mx2);
 cudaFreeArray(d_my2);
 cudaFreeArray(d_mz2);
-cudaFreeArray(d_img);
+// cudaFreeArray(d_img);
 cudaFreeArray(d_imgOnes);
 cudaFreeArray(d_proj);
 cudaFreeArray(d_singleViewImg1);
 cudaFreeArray(d_singleViewImg2);
 cudaFreeArray(d_singleViewProj2);
+OUT_IMG = mxCreateNumericMatrix(0, 0, mxSINGLE_CLASS,mxREAL);
+mxSetDimensions(OUT_IMG, extent_img, 3);
+mxSetData(OUT_IMG, mxMalloc(numBytesImg));
+float *h_outimg = (float*)mxGetData(OUT_IMG);
+cudaMemcpy(h_outimg, d_img, numBytesImg, cudaMemcpyDeviceToHost);
+cudaFreeArray(d_img);
 }
