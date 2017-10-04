@@ -1,1 +1,1 @@
-__global__ void kernel_deformation(cudaArray *singleViewImg1, cudaTextureObject_t tex_img, cudaArray *mx2, cudaArray *my2, cudaArray *mz2, int nx, int ny, int nz);
+__global__ void kernel_deformation(float *img1, float *img, float *mx2, float *my2, float *mz2, int nx, int ny, int nz);

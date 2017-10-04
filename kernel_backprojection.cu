@@ -1,15 +1,16 @@
 #include <math.h>
 #define ABS(x) ((x) > 0 ? (x) : - (x))
-#define MAX((a), (b)) ((a) > (b) ? (a) : (b))
-#define MIN((a), (b)) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-__global__ void kerner_backprojection(cudaArray *img, cudaArray *proj, float angle, float SO, float SD, float da, int na, float ai, float db, int nb, float bi, int nx, int ny, int nz){
-    int x = blockSize.x * blockIdx.x + threadIdx.x;
-    int y = blockSize.y * blockIdx.y + threadIdx.y;
-    int z = blockSize.z * blockIdx.z + threadIdx.z;
-    if (x >= nx || y >= ny || z >= nz)
+__global__ void kernel_backprojection(float *img, float *proj, float angle, float SO, float SD, float da, int na, float ai, float db, int nb, float bi, int nx, int ny, int nz){
+    int ix = 16 * blockIdx.x + threadIdx.x;
+    int iy = 16 * blockIdx.y + threadIdx.y;
+    int iz = 4 * blockIdx.z + threadIdx.z;
+    if (ix >= nx || iy >= ny || iz >= nz)
         return;
-    img[x][y][z] = 0.0f;
+    int id = ix + iy * nx + iz * nx * ny;
+    img[id] = 0.0f;
     float xa, ya, za;
     xa = ix + 0.5f - nx / 2;
     ya = iy + 0.5f - ny / 2;
@@ -30,16 +31,19 @@ __global__ void kerner_backprojection(cudaArray *img, cudaArray *proj, float ang
     xb = xa * cphi + ya * sphi;
     yb = -xa * sphi + ya * cphi;
     zb = za - 0.5f;
-    float bl, br, bt, bb;// b_left on detector
+    float bl, br, bt, bb, temp;// b_left on detector
     int ibl, ibr, ibt, ibb;
     bl = yl * SD / (xl + SO) / da;
-    ibl = (int)floor(bl + na / 2);
     br = yr * SD / (xr + SO) / da;
-    ibr = (int)floor(br + na / 2);
+    if (br < bl) {temp = br; br = bl; bl = temp;}
     bt = zt * SD / (xt + SO) / db;
-    ibt = (int)floor(bt + nb / 2);
     bb = zb * SD / (xb + SO) / db;
+    if (bt < bb) {temp = bt; bt = bb; bb = temp;}
+    ibl = (int)floor(bl + na / 2);
+    ibr = (int)floor(br + na / 2);
+    ibt = (int)floor(bt + nb / 2);
     ibb = (int)floor(bb + nb / 2);
+
     float inter_lr, inter_tb; // interval between boundary_left and boundary_right
     inter_lr = br - bl;
     inter_tb = bt - bb;
@@ -51,8 +55,8 @@ __global__ void kerner_backprojection(cudaArray *img, cudaArray *proj, float ang
         for (int ib = ibb; ib <= ibt; ib ++){
             if (ib  < 0 || ib >= nb)
                 continue;
-            wb = MIN(ib + 1, bb + nb / 2) - MAX(ib, bt + nb / 2); wb /= inter_tb;
-            img[x][y][z] += proj[ia][ib][0] * wa * wb;
+            wb = MIN(ib + 1, bt + nb / 2) - MAX(ib, bb + nb / 2); wb /= inter_tb;
+            img[id] += proj[ia + ib * na] * wa * wb;
         }
     }
 }

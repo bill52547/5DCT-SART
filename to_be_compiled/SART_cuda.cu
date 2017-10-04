@@ -41,7 +41,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
 
 // load geometry parameters, all need parameter for single view projection
 int nx, ny, nz, na, nb, numImg, numBytesImg, numSingleProj, numBytesSingleProj;
-float da, db, ai, bi, SO, SD;
+float da, db, ai, bi, SO, SD, dx;
 nx = (int)mxGetScalar(mxGetField(GEO_PARA, 0, "nx"));
 ny = (int)mxGetScalar(mxGetField(GEO_PARA, 0, "ny"));
 nz = (int)mxGetScalar(mxGetField(GEO_PARA, 0, "nz"));
@@ -51,12 +51,13 @@ na = (int)mxGetScalar(mxGetField(GEO_PARA, 0, "na"));
 nb = (int)mxGetScalar(mxGetField(GEO_PARA, 0, "nb"));
 numSingleProj = na * nb;
 numBytesSingleProj = numSingleProj * sizeof(float);
-da = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "da"));
-db = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "db"));
-ai = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "ai"));
-bi = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "bi"));
-SO = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "SO"));
-SD = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "SD"));
+dx = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "dx"));
+da = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "da")) / dx;
+db = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "db")) / dx;
+ai = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "ai")) - (float)na / 2 + 0.5f;
+bi = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "bi")) - (float)nb / 2 + 0.5f;
+SO = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "SO")) / dx;
+SD = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "SD")) / dx;
 
 // load iterating parameters, for the whole bin
 int n_view, n_iter, numProj, numBytesProj;
@@ -73,7 +74,6 @@ numProj = numSingleProj * n_view;
 numBytesProj = numProj * sizeof(float);
 angles = (float*)mxGetData(mxGetField(ITER_PARA, 0, "angles"));
 lambda = (float)mxGetScalar(mxGetField(ITER_PARA, 0, "lambda"));
-
 // load initial guess of image
 float *h_img;
 h_img = (float*)mxGetData(IN_IMG);
@@ -93,7 +93,6 @@ cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32, 0, 0, 0, cudaChann
 struct cudaExtent extent_img = make_cudaExtent(nx, ny, nz);
 struct cudaExtent extent_proj = make_cudaExtent(na, nb, n_view);
 struct cudaExtent extent_singleProj = make_cudaExtent(na, nb, 1);
-const mwSize *outDim = mxGetDimensions(IN_IMG);
 
 // malloc in device: DVF for SINGLE view image from the bin
 float *d_mx, *d_my, *d_mz, *d_mx2, *d_my2, *d_mz2;
@@ -103,6 +102,7 @@ cudaMalloc((void**)&d_mz, numBytesImg);
 cudaMalloc((void**)&d_mx2, numBytesImg);
 cudaMalloc((void**)&d_my2, numBytesImg);
 cudaMalloc((void**)&d_mz2, numBytesImg);
+
 
 // malloc in device: projection of the whole bin
 float *d_proj;
@@ -127,10 +127,10 @@ float *d_singleViewImg1, *d_singleViewImg2, *d_imgOnes;
 cudaMalloc(&d_singleViewImg1, numBytesImg);
 cudaMalloc(&d_singleViewImg2, numBytesImg);
 cudaMalloc(&d_imgOnes, numBytesImg);
-
-
+float angle;
 for (int iter = 0; iter < n_iter; iter++){ // iteration
     for (int i_view = 0; i_view < n_view; i_view++){ // view
+        angle = angles[i_view];
         // memory copy to device of: DVF from bin reference image to i_view image
         // X
         cudaMemcpy(d_mx, h_mx + i_view * numBytesImg, numBytesImg, cudaMemcpyHostToDevice);
@@ -157,7 +157,7 @@ for (int iter = 0; iter < n_iter; iter++){ // iteration
         cudaDeviceSynchronize();
 
         // projection of deformed image from initial guess
-        kernel_projection<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_singleViewImg1, angles[i_view], SO, SD, da, na, ai, db, nb, bi, nx, ny, nz); // TBD
+        kernel_projection<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_singleViewImg1, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz); // TBD
         cudaDeviceSynchronize();
 
         // difference between true projection and projection from initial guess
@@ -166,18 +166,28 @@ for (int iter = 0; iter < n_iter; iter++){ // iteration
         cudaDeviceSynchronize();
 
         // backprojecting the difference of projections
-        kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2, angles[i_view], SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
+        mexPrintf("angle = %f.\n", angle);
+        mexPrintf("SO = %f.\n", SO);
+        mexPrintf("SD = %f.\n", SD);
+        mexPrintf("da = %f.\n", da);
+        mexPrintf("db = %f.\n", db);
+        mexPrintf("ai = %f.\n", ai);
+        mexPrintf("bi = %f.\n", bi);
+        kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
         cudaDeviceSynchronize();
 
         // deform backprojection back to the bin
         kernel_deformation<<<gridSize_img, blockSize>>>(d_singleViewImg2, d_singleViewImg1, d_mx, d_my, d_mz, nx, ny, nz);
+        cudaDeviceSynchronize();
 
         // calculate the ones backprojection data
         kernel_initial<<<gridSize_img, blockSize>>>(d_singleViewImg1, nx, ny, nz, 1);
         cudaDeviceSynchronize();
-        kernel_projection<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_singleViewImg1, angles[i_view], SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
+
+        kernel_projection<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_singleViewImg1, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
         cudaDeviceSynchronize();
-        kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2, angles[i_view], SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
+
+        kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
         cudaDeviceSynchronize();
 
         // weighting
@@ -189,6 +199,22 @@ for (int iter = 0; iter < n_iter; iter++){ // iteration
         cudaDeviceSynchronize();              
     }
 }
+OUT_IMG = mxCreateNumericMatrix(0, 0, mxSINGLE_CLASS, mxREAL);
+
+
+
+// const mwSize *outDim = mxGetDimensions(PROJ); // IN_IMG or PROJ
+// mxSetDimensions(OUT_IMG, outDim, 3);
+// mxSetData(OUT_IMG, mxMalloc(numBytesImg));
+// float *h_outimg = (float*)mxGetData(OUT_IMG);
+// cudaMemcpy(h_outimg, d_singleViewProj2, numBytesSingleProj, cudaMemcpyDeviceToHost);
+
+const mwSize *outDim = mxGetDimensions(IN_IMG); // IN_IMG or PROJ
+mxSetDimensions(OUT_IMG, outDim, 3);
+mxSetData(OUT_IMG, mxMalloc(numBytesImg));
+float *h_outimg = (float*)mxGetData(OUT_IMG);
+cudaMemcpy(h_outimg, d_img, numBytesImg, cudaMemcpyDeviceToHost);
+
 cudaFree(d_mx);
 cudaFree(d_my);
 cudaFree(d_mz);
@@ -200,11 +226,7 @@ cudaFree(d_proj);
 cudaFree(d_singleViewImg1);
 cudaFree(d_singleViewImg2);
 cudaFree(d_singleViewProj2);
-OUT_IMG = mxCreateNumericMatrix(0, 0, mxSINGLE_CLASS, mxREAL);
-mxSetDimensions(OUT_IMG, outDim, 3);
-mxSetData(OUT_IMG, mxMalloc(numBytesImg));
-float *h_outimg = (float*)mxGetData(OUT_IMG);
-cudaMemcpy(h_outimg, d_img, numBytesImg, cudaMemcpyDeviceToHost);
+
 cudaFree(d_img);
 cudaDeviceReset();
 return;

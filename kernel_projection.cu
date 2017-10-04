@@ -1,17 +1,19 @@
 #include <math.h>
 #define ABS(x) ((x) > 0 ? (x) : - (x))
-#define MAX((a), (b)) ((a) > (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-__global__ void kerner_projection(cudaArray *proj, cudaArray *img, float angle, float SO, float SD, float da, int na, float ai, float db, int nb, float bi, int nx, int ny, int nz){
-    int ia = blockSize.x * blockIdx.x + threadIdx.x;
-    int ib = blockSize.y * blockIdx.y + threadIdx.y;
+__global__ void kernel_projection(float *proj, float *img, float angle, float SO, float SD, float da, int na, float ai, float db, int nb, float bi, int nx, int ny, int nz){
+    int ib = 16 * blockIdx.x + threadIdx.x;
+    int ia = 16 * blockIdx.y + threadIdx.y;
     if (ia >= na || ib >= nb)
         return;
-    proj[ia][ib][0] = 0.0f;
+    int id = ib + (na - 1 - ia) * nb;
+    proj[id] = 0.0f;
     float x1, y1, z1, x2, y2, z2, x20, y20, cphi, sphi;
+    angle += 3.141592653589793;
     cphi = (float)cosf(angle);
     sphi = (float)sinf(angle);
-    x1 = -SO * cphi
+    x1 = -SO * cphi;
     y1 = -SO * sphi;
     z1 = 0.0f;
     x20 = SD - SO;
@@ -26,8 +28,8 @@ __global__ void kerner_projection(cudaArray *proj, cudaArray *img, float angle, 
 
     // y - z plane, where ABS(x21) > ABS(y21)
     if (ABS(x21) > ABS(y21)){
-        float yi1, yi2, yi12, ky1, ky2, zi1, zi2, zi12, kz1, kz2;
-        int Yi1, Yi2, Zi1, Zi2, temp;
+        float yi1, yi2, ky1, ky2, zi1, zi2, kz1, kz2;
+        int Yi1, Yi2, Zi1, Zi2;
         // for each y - z plane, we calculate and add the contribution of related pixels
         for (int ix = 0; ix < nx; ix++){
             // calculate y indices of intersecting voxel candidates
@@ -56,7 +58,7 @@ __global__ void kerner_projection(cudaArray *proj, cudaArray *img, float angle, 
 
             // calculate contribution of a voxel to the projection value
             int iy, iz;
-            float wy1, wy2, wz1, wz1;
+            float wy1, wy2, wz1, wz2;
             wy1 = (MAX(Yi1, Yi2) - yi1) / (yi2 - yi1); wy2 = 1 - wy1;
             wz1 = (MAX(Zi1, Zi2) - zi1) / (zi2 - zi1); wz2 = 1 - wz1;
 
@@ -65,7 +67,7 @@ __global__ void kerner_projection(cudaArray *proj, cudaArray *img, float angle, 
             {
                 iy = Yi1; iz = Zi1; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * 1.0f;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * 1.0f;
                 continue;
             }
             // Yi1 != Yi2 && Zi1 == Zi2
@@ -73,10 +75,10 @@ __global__ void kerner_projection(cudaArray *proj, cudaArray *img, float angle, 
             {
                 iy = Yi1; iz = Zi1; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wy1;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wy1;
                 iy = Yi2; iz = Zi1; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wy2;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wy2;
                 continue;                
             }
             // Yi1 == Yi2 && Zi1 != Zi2
@@ -84,10 +86,10 @@ __global__ void kerner_projection(cudaArray *proj, cudaArray *img, float angle, 
             {
                 iy = Yi1; iz = Zi1; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wz1;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wz1;
                 iy = Yi1; iz = Zi2; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wz2;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wz2;
                 continue;                
             }
             // Yi1 != Yi2 && Zi1 != Zi2
@@ -95,24 +97,24 @@ __global__ void kerner_projection(cudaArray *proj, cudaArray *img, float angle, 
             {
                 iy = Yi1; iz = Zi1; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wy1 * wz1;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wy1 * wz1;
                 iy = Yi1; iz = Zi2; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wy1 * wz2;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wy1 * wz2;
                 iy = Yi2; iz = Zi1; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wy2 * wz1;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wy2 * wz1;
                 iy = Yi2; iz = Zi2; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wy2 * wz2;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wy2 * wz2;
                 continue;                
             }
         }
     }
     // x - z plane, where ABS(x21) <= ABS(y21)    
     else{
-    float xi1, xi2, xi12, ky1, ky2, zi1, zi2, zi12, kz1, kz2;
-        int Xi1, Xi2, Zi1, Zi2, temp;
+    float xi1, xi2, ky1, ky2, zi1, zi2, kz1, kz2;
+        int Xi1, Xi2, Zi1, Zi2;
         // for each y - z plane, we calculate and add the contribution of related pixels
         for (int ix = 0; ix < nx; ix++){
             // calculate y indices of intersecting voxel candidates
@@ -141,7 +143,7 @@ __global__ void kerner_projection(cudaArray *proj, cudaArray *img, float angle, 
 
             // calculate contribution of a voxel to the projection value
             int iy, iz;
-            float wx1, wx2, wz1, wz1;
+            float wx1, wx2, wz1, wz2;
             wx1 = (MAX(Xi1, Xi2) - xi1) / (xi2 - xi1); wx2 = 1 - wx1;
             wz1 = (MAX(Zi1, Zi2) - zi1) / (zi2 - zi1); wz2 = 1 - wz1;
 
@@ -150,7 +152,7 @@ __global__ void kerner_projection(cudaArray *proj, cudaArray *img, float angle, 
             {
                 iy = Xi1; iz = Zi1; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * 1.0f;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * 1.0f;
                 continue;
             }
             // Xi1 != Xi2 && Zi1 == Zi2
@@ -158,10 +160,10 @@ __global__ void kerner_projection(cudaArray *proj, cudaArray *img, float angle, 
             {
                 iy = Xi1; iz = Zi1; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wx1;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wx1;
                 iy = Xi2; iz = Zi1; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wx2;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wx2;
                 continue;                
             }
             // Xi1 == Xi2 && Zi1 != Zi2
@@ -169,10 +171,10 @@ __global__ void kerner_projection(cudaArray *proj, cudaArray *img, float angle, 
             {
                 iy = Xi1; iz = Zi1; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wz1;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wz1;
                 iy = Xi1; iz = Zi2; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wz2;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wz2;
                 continue;                
             }
             // Xi1 != Xi2 && Zi1 != Zi2
@@ -180,16 +182,16 @@ __global__ void kerner_projection(cudaArray *proj, cudaArray *img, float angle, 
             {
                 iy = Xi1; iz = Zi1; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wx1 * wz1;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wx1 * wz1;
                 iy = Xi1; iz = Zi2; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wx1 * wz2;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wx1 * wz2;
                 iy = Xi2; iz = Zi1; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wx2 * wz1;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wx2 * wz1;
                 iy = Xi2; iz = Zi2; 
                 if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[ia][ib][0] += img[ix][iy][iz] * wx2 * wz2;
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wx2 * wz2;
                 continue;                
             }
         }
