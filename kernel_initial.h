@@ -1,1 +1,1 @@
-__global__ void kernel_update(float *img, int nx, int ny, int nz, float value);
+__global__ void kernel_initial(float *img, int nx, int ny, int nz, float value);

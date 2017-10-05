@@ -9,7 +9,7 @@ __global__ void kernel_deformation(float *img1, float *img, float *mx2, float *m
     int yi = my2[id];
     int zi = mz2[id];
     img1[id] = 0.0f;
-    if (xi < 0.5f || xi > nx - 0.5f || yi < 0.5f || yi > ny - 0.5f || zi < 0.5f || zi > nz - 0.5f)
+    if (xi < 0.5f || xi >= nx - 0.5f || yi < 0.5f || yi >= ny - 0.5f || zi < 0.5f || zi >= nz - 0.5f)
         return;
     int ix1, ix2, iy1, iy2, iz1, iz2;
     float wx1, wx2, wy1, wy2, wz1, wz2;

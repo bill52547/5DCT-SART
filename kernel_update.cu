@@ -8,4 +8,6 @@ __global__ void kernel_update(float *img1, float *img, int nx, int ny, int nz, f
     img1[id] -= lambda * img[id];
     if (img1[id] < 0)
         img1[id] = 0;
+    if (img1[id] > 100000)
+        img1[id] = 100000;
 }

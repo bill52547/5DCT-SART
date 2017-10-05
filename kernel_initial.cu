@@ -1,4 +1,4 @@
-__global__ void kernel_update(float *img, int nx, int ny, int nz, float value){
+__global__ void kernel_initial(float *img, int nx, int ny, int nz, float value){
     int ix = 16 * blockIdx.x + threadIdx.x;
     int iy = 16 * blockIdx.y + threadIdx.y;
     int iz = 4 * blockIdx.z + threadIdx.z;

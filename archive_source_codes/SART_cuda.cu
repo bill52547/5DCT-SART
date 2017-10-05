@@ -130,26 +130,28 @@ cudaMalloc(&d_imgOnes, numBytesImg);
 float angle;
 for (int iter = 0; iter < n_iter; iter++){ // iteration
     for (int i_view = 0; i_view < n_view; i_view++){ // view
+        // mexPrintf("i_view = %d.\n", i_view);
+        
         angle = angles[i_view];
         // memory copy to device of: DVF from bin reference image to i_view image
         // X
-        cudaMemcpy(d_mx, h_mx + i_view * numBytesImg, numBytesImg, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_mx, h_mx + i_view * numImg, numBytesImg, cudaMemcpyHostToDevice);
 
         // Y
-        cudaMemcpy(d_my, h_my + i_view * numBytesImg, numBytesImg, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_my, h_my + i_view * numImg, numBytesImg, cudaMemcpyHostToDevice);
 
         // Z
-        cudaMemcpy(d_mz, h_mz + i_view * numBytesImg, numBytesImg, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_mz, h_mz + i_view * numImg, numBytesImg, cudaMemcpyHostToDevice);
 
         // memory copy to device of: inverted DVF from bin reference image to i_view image
         // X
-        cudaMemcpy(d_mx2, h_mx2 + i_view * numBytesImg, numBytesImg, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_mx2, h_mx2 + i_view * numImg, numBytesImg, cudaMemcpyHostToDevice);
 
         // Y
-        cudaMemcpy(d_my2, h_my2 + i_view * numBytesImg, numBytesImg, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_my2, h_my2 + i_view * numImg, numBytesImg, cudaMemcpyHostToDevice);
 
         // Z
-        cudaMemcpy(d_mz2, h_mz2 + i_view * numBytesImg, numBytesImg, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_mz2, h_mz2 + i_view * numImg, numBytesImg, cudaMemcpyHostToDevice);
         
 
         // deformed image for i_view, from reference image of the bin
@@ -166,13 +168,6 @@ for (int iter = 0; iter < n_iter; iter++){ // iteration
         cudaDeviceSynchronize();
 
         // backprojecting the difference of projections
-        mexPrintf("angle = %f.\n", angle);
-        mexPrintf("SO = %f.\n", SO);
-        mexPrintf("SD = %f.\n", SD);
-        mexPrintf("da = %f.\n", da);
-        mexPrintf("db = %f.\n", db);
-        mexPrintf("ai = %f.\n", ai);
-        mexPrintf("bi = %f.\n", bi);
         kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
         cudaDeviceSynchronize();
 
