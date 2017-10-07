@@ -1,1 +1,1 @@
-__host__ void kernel_invertDVF(cudaArray *d_mx2, cudaArray *d_my2, cudaArray *d_mz2, cudaTextureObject_t tex_mx, cudaTextureObject_t tex_my, cudaTextureObject_t tex_mz, int nx, int ny, int nz, int niter, const dim3 gridSize_img, const dim3 blockSize);
+__global__ void kernel_invertDVF(float *mx2, float *my2, float *mz2, cudaTextureObject_t alpha_x, cudaTextureObject_t alpha_y, cudaTextureObject_t alpha_z, cudaTextureObject_t beta_x, cudaTextureObject_t beta_y, cudaTextureObject_t beta_z, float volume, float flow, int nx, int ny, int nz, int niter);
