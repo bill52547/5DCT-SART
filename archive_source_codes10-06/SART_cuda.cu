@@ -188,26 +188,15 @@ else
     mexErrMsgIdAndTxt("MATLAB:badInput","Can't found valid iter_para.beta_z.\n");
 
 // load 5DCT parameters volume (v) and flow (f)
-float *volumes, *flows, ref_flow, ref_volume;
+float *volumes, *flows;
 if (mxGetField(ITER_PARA, 0, "volumes") != NULL)
     volumes= (float*)mxGetData(mxGetField(ITER_PARA, 0, "volumes"));
 else
-    mexErrMsgIdAndTxt("MATLAB:badInput","Can't found valid volume in iter_para.volumes.\n");  
-
+    mexErrMsgIdAndTxt("MATLAB:badInput","Can't found valid volume in iter_para.volumes.\n");    
 if (mxGetField(ITER_PARA, 0, "flows") != NULL)
     flows = (float*)mxGetData(mxGetField(ITER_PARA, 0, "flows"));
 else
     mexErrMsgIdAndTxt("MATLAB:badInput","Can't found valid flow in iter_para.flows.\n");    
-
-if (mxGetField(ITER_PARA, 0, "volume0") != NULL)
-    ref_volume = (float)mxGetScalar(mxGetField(ITER_PARA, 0, "volume0"));
-else
-    mexErrMsgIdAndTxt("MATLAB:badInput","Can't found valid referenced volume in iter_para.volume0.\n");    
-
-if (mxGetField(ITER_PARA, 0, "flow0") != NULL)
-    ref_flow = (float)mxGetScalar(mxGetField(ITER_PARA, 0, "flow0"));
-else
-    mexErrMsgIdAndTxt("MATLAB:badInput","Can't found valid referenced flow in iter_para.flow0.\n");    
 
 numProj = numSingleProj * n_view;
 numBytesProj = numProj * sizeof(float);
@@ -473,22 +462,14 @@ cudaMalloc(&d_mz, numBytesImg);
 cudaMalloc(&d_mx2, numBytesImg);
 cudaMalloc(&d_my2, numBytesImg);
 cudaMalloc(&d_mz2, numBytesImg);
-
-mexPrintf("Begin Iterations:\n");mexEvalString("drawnow;");
-
-for (int i = 0; i < n_iter; i++)
-    mexPrintf("=");mexEvalString("drawnow;");
-mexPrintf("\n");mexEvalString("drawnow;");
-
+float fref = -0.4193;
+float vref = 0;
 for (int iter = 0; iter < n_iter; iter++){ // iteration
-    mexPrintf("x");mexEvalString("drawnow;");
-
     for (int i_view = 0; i_view < n_view; i_view++){ // view
-
         // mexPrintf("i_view = %d.\n", i_view);        
         angle = angles[i_view];
-        volume = ref_volume - volumes[i_view];
-        flow = ref_flow - flows[i_view];
+        volume = vref - volumes[i_view];
+        flow = fref - flows[i_view];
 
         // generate forwards DVFs: d_mx, d_my, d_mz
         kernel_forwardDVF<<<gridSize_img, blockSize>>>(d_mx, d_my, d_mz, tex_alpha_x, tex_alpha_y, tex_alpha_z, tex_beta_x, tex_beta_y, tex_beta_z, volume, flow, nx, ny, nz);
@@ -565,7 +546,6 @@ for (int iter = 0; iter < n_iter; iter++){ // iteration
         cudaDeviceSynchronize();              
     }
 }
-mexPrintf("\n");mexEvalString("drawnow;");
 OUT_IMG = mxCreateNumericMatrix(0, 0, mxSINGLE_CLASS, mxREAL);
 
 
