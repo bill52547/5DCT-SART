@@ -66,17 +66,17 @@ else{
 
 // detector resolution
 if (mxGetField(GEO_PARA, 0, "da") != NULL)
-    da = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "da")) / dx;
+    da = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "da"));
 else{
-    da = 1.0f / dx;
+    da = 1.0f;
     mexPrintf("Automatically set detector cell size da to 1. \n");
     mexPrintf("If don't want that default value, please set para.da manually.\n");
 }
 
 if (mxGetField(GEO_PARA, 0, "db") != NULL)
-    db = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "db")) / dx;
+    db = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "db"));
 else{
-    db = 1.0f / dx;
+    db = 1.0f;
     mexPrintf("Automatically set detectof cell size db to 1. \n");
     mexPrintf("If don't want that default value, please set para.db manually.\n");
 }
@@ -105,19 +105,21 @@ else{
     bi = - (float)nb / 2 + 0.5f;
 }
 
+
 if (mxGetField(GEO_PARA, 0, "SO") != NULL)
-    SO = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "SO")) / dx;
-else if (mxGetField(GEO_PARA, 0, "DI") != NULL)
-    SO = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "DI")) / dx;
+    SO = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "SO"));
+else if (mxGetField(GEO_PARA, 0, "SI") != NULL)
+    SO = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "SI"));
 else
     mexErrMsgIdAndTxt("MATLAB:badInput","Can't found valid distance between source and isocenter, which is denoted with para.SO or para.DI.\n");
 
 if (mxGetField(GEO_PARA, 0, "SD") != NULL)
-    SD = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "SD")) / dx;
-else if (mxGetField(GEO_PARA, 0, "SI") != NULL)
-    SD = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "SI")) / dx + SO;
+    SD = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "SD"));
+else if (mxGetField(GEO_PARA, 0, "DI") != NULL)
+    SD = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "DI")) + SO;
 else
     mexErrMsgIdAndTxt("MATLAB:badInput","Can't found valid distance between source and detector plane, which is denoted with para.SD or para.SI + para.DI.\n");
+
 
 // load iterating parameters, for the whole bin
 int n_iter, n_iter_invertDVF;
