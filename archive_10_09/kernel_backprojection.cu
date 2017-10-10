@@ -13,8 +13,8 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
         return;
     int id = ix + iy * nx + iz * nx * ny;
     img[id] = 0.0f;
-    float cphi, sphi,x1, y1, z1, x20, y20, x2, y2, z2, x2n, y2n, z2n, x2m, y2m, z2m, p2x, p2y, p2z, p2xn, p2yn, p2zn, ptmp;
-    float talpha, tgamma, calpha, cgamma, ds, dt, temp, dst, det;
+    float cphi, sphi,x1, y1, z1, x20, y20, x2, y2, z2, x2n, y2n, z2n, x2m, y2m, p2x, p2y, p2z, p2xn, p2yn, p2zn, ptmp;
+    float ds, dt, temp, dst, det;
     float xc, yc, zc, xcn, ycn, zcn, xcm, ycm, xc0, yc0;
     float as, ae, bs, be, atmp, btmp, dsp, dtp, L;
     angle += PI;
@@ -85,8 +85,6 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
                 continue;
             if (p2y >= (float)ny)
                 continue;
-            talpha = (y2m - y1) / (x2m - x1);
-            calpha = 1.0f / ((float)sqrt(1 + talpha * talpha));
             if (p2y < 0.0f)
                 p2y = 0.0f;
             if (p2yn >= ny)
@@ -98,7 +96,6 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
             {
                 z2 = (bi + ib - 0.5f) * db;
                 z2n = (bi + ib + 0.5f) * db;
-                z2m = (z2 + z2n) / 2;
                 temp = (z2 - z1) / (x2m - x1);
                 p2z = (ix + 0.5f - nx / 2 - x1) * temp + z1 + nz / 2;
                 temp = (z2n - z1) / (x2m - x1);
@@ -110,8 +107,6 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
                     continue;
                 if (p2z >= (float)nz)
                     continue;
-                tgamma = (z2m - z1) / (x2m - x1);
-                cgamma = 1.0f / ((float)sqrt(1 + tgamma * tgamma));
                 if (p2z < 0.0f)
                     p2z = 0.0f;
                 if (p2zn > nz)
@@ -183,8 +178,6 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
                 continue;
             if (p2x >= (float)nx)
                 continue;
-            talpha = (x2m - x1) / (y2m - y1);
-            calpha = 1.0f / ((float)sqrt(1 + talpha * talpha));
             if (p2x < 0.0f)
                 p2x = 0.0f;
             if (p2xn >= nx)
@@ -196,7 +189,6 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
             {
                 z2 = (bi + ib - 0.5f) * db;
                 z2n = (bi + ib + 0.5f) * db;
-                z2m = (z2 + z2n) / 2;
                 temp = (z2 - z1) / (y2m - y1);
                 p2z = (iy + 0.5f - ny / 2 - y1) * temp + z1 + nz / 2;
                 temp = (z2n - z1) / (y2m - y1);
@@ -208,8 +200,6 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
                     continue;
                 if (p2z >= (float)nz)
                     continue;
-                tgamma = (z2m - z1) / (y2m - y1);
-                cgamma = 1.0f / ((float)sqrt(1 + tgamma * tgamma));
                 if (p2z < 0.0f)
                     p2z = 0.0f;
                 if (p2zn > nz)

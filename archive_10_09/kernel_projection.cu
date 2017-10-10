@@ -1,6 +1,7 @@
 #include <math.h>
 #define ABS(x) ((x) > 0 ? (x) : - (x))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 __global__ void kernel_projection(float *proj, float *img, float angle, float SO, float SD, float da, int na, float ai, float db, int nb, float bi, int nx, int ny, int nz){
     int ib = 16 * blockIdx.x + threadIdx.x;
@@ -61,7 +62,12 @@ __global__ void kernel_projection(float *proj, float *img, float angle, float SO
             float wy1, wy2, wz1, wz2;
             wy1 = (MAX(Yi1, Yi2) - yi1) / (yi2 - yi1); wy2 = 1 - wy1;
             wz1 = (MAX(Zi1, Zi2) - zi1) / (zi2 - zi1); wz2 = 1 - wz1;
-
+            Xi1 = MAX(Xi1, 0); Xi1 = MIN(nx - 1, 0);
+            Xi1 = MAX(Xi1, 0); Xi1 = MIN(nx - 1, 0);
+            Yi1 = MAX(Yi1, 0); Yi1 = MIN(ny - 1, 0);
+            Yi1 = MAX(Yi1, 0); Yi1 = MIN(ny - 1, 0);
+            Zi1 = MAX(Zi1, 0); Zi1 = MIN(nz - 1, 0);
+            Zi1 = MAX(Zi1, 0); Zi1 = MIN(nz - 1, 0);
             // Yi1 == Yi2 && Zi1 == Zi2
             if (Yi1 == Yi2 && Zi1 == Zi2)
             {

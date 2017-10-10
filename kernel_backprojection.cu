@@ -85,7 +85,6 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
                 continue;
             if (p2y >= (float)ny)
                 continue;
-
             if (p2y < 0.0f)
                 p2y = 0.0f;
             if (p2yn >= ny)
@@ -108,7 +107,6 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
                     continue;
                 if (p2z >= (float)nz)
                     continue;
-
                 if (p2z < 0.0f)
                     p2z = 0.0f;
                 if (p2zn > nz)
@@ -180,7 +178,6 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
                 continue;
             if (p2x >= (float)nx)
                 continue;
-
             if (p2x < 0.0f)
                 p2x = 0.0f;
             if (p2xn >= nx)
@@ -203,7 +200,6 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
                     continue;
                 if (p2z >= (float)nz)
                     continue;
-
                 if (p2z < 0.0f)
                     p2z = 0.0f;
                 if (p2zn > nz)

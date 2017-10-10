@@ -1,3 +1,5 @@
+#define ABS(x) ((x) > 0 ? (x) : -(x))
+
 __global__ void kernel_division(float *img1, float *img, int nx, int ny, int nz)
 {
     int ix = 16 * blockIdx.x + threadIdx.x;
