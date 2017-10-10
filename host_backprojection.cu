@@ -23,7 +23,7 @@ h_img = (float*)mxGetData(prhs[0]);
 h_proj = (float*)mxGetData(prhs[1]);
 
 int na, nb, nx, ny, nz;
-float angle, SO, SD, da, ai, db, bi;
+float angle, SO, SD, da, ai, db, bi, dx;
 angle = (float)mxGetScalar(mxGetField(prhs[2], 0, "angle"));
 SO = (float)mxGetScalar(mxGetField(prhs[2], 0, "SO"));
 SD = (float)mxGetScalar(mxGetField(prhs[2], 0, "SD"));

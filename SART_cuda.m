@@ -7,8 +7,8 @@ function updatedImg = SART_cuda(img, para, iter_para)
 %
 % Inputs:
 %    img - initial guess or the pre-staged image of 1st reference bin. 
-%    para - parameters of a single detector. In another word, 
-%    input3 - Description
+%    para - parameters those are indenpendent with projection angles
+%    iter_para - paratmeters those are dependent with projection angles, and the model parameters.
 %
 % Outputs:
 %    output1 - Description
