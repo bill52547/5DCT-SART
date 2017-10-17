@@ -158,7 +158,7 @@ else{
 N_view = n_views[n_bin];
 
 // 5D models
-float *h_alpha_x, *h_alpha_y, *h_alpha_z, *h_beta_x, *h_beta_y, *h_beta_z, *h_const_x, *h_const_y, *h_const_z, *angles, lambda;
+float *h_alpha_x, *h_alpha_y, *h_alpha_z, *h_beta_x, *h_beta_y, *h_beta_z, *angles, lambda;
 
 // load 5DCT alpha and beta
 if (mxGetField(ITER_PARA, 0, "alpha_x") != NULL)
@@ -190,21 +190,6 @@ if (mxGetField(ITER_PARA, 0, "beta_z") != NULL)
     h_beta_z = (float*)mxGetData(mxGetField(ITER_PARA, 0, "beta_z"));
 else
     mexErrMsgIdAndTxt("MATLAB:badInput","Can't found valid iter_para.beta_z.\n");
-
-if (mxGetField(ITER_PARA, 0, "const_x") != NULL)
-    h_const_x = (float*)mxGetData(mxGetField(ITER_PARA, 0, "const_x"));
-else
-    mexErrMsgIdAndTxt("MATLAB:badInput","Can't found valid iter_para.const_x.\n");
-
-if (mxGetField(ITER_PARA, 0, "const_y") != NULL)
-    h_const_y = (float*)mxGetData(mxGetField(ITER_PARA, 0, "const_y")); 
-else
-    mexErrMsgIdAndTxt("MATLAB:badInput","Can't found valid iter_para.const_y.\n");
-
-if (mxGetField(ITER_PARA, 0, "const_z") != NULL)
-    h_const_z = (float*)mxGetData(mxGetField(ITER_PARA, 0, "const_z"));
-else
-    mexErrMsgIdAndTxt("MATLAB:badInput","Can't found valid iter_para.const_z.\n");
 
 // load 5DCT parameters volume (v) and flow (f)
 float *volumes, *flows, *ref_volumes, *ref_flows;
@@ -258,7 +243,7 @@ struct cudaExtent extent_img = make_cudaExtent(nx, ny, nz);
 struct cudaExtent extent_singleProj = make_cudaExtent(na, nb, 1);
 
 //Allocate CUDA array in device memory of 5DCT matrices: alpha and beta
-cudaArray *d_alpha_x, *d_alpha_y, *d_alpha_z, *d_beta_x, *d_beta_y, *d_beta_z, *d_const_x, *d_const_y, *d_const_z;
+cudaArray *d_alpha_x, *d_alpha_y, *d_alpha_z, *d_beta_x, *d_beta_y, *d_beta_z;
 cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
 
 cudaError_t cudaStat;
@@ -308,30 +293,6 @@ if (cudaStat != cudaSuccess) {
         mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
 }
 
-// const_x
-cudaStat = cudaMalloc3DArray(&d_const_x, &channelDesc, extent_img);
-if (cudaStat != cudaSuccess) {
-	mexPrintf("Array memory allocation for const_x failed.\n");
-	mexPrintf("Error code %d: %s\n",cudaStat,cudaGetErrorString(cudaStat));
-        mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
-}
-
-// const_y
-cudaStat = cudaMalloc3DArray(&d_const_y, &channelDesc, extent_img);
-if (cudaStat != cudaSuccess) {
-	mexPrintf("Array memory allocation for const_y failed.\n");
-	mexPrintf("Error code %d: %s\n",cudaStat,cudaGetErrorString(cudaStat));
-        mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
-}
-
-// const_z
-cudaStat = cudaMalloc3DArray(&d_const_z, &channelDesc, extent_img);
-if (cudaStat != cudaSuccess) {
-	mexPrintf("Array memory allocation for const_z failed.\n");
-	mexPrintf("Error code %d: %s\n",cudaStat,cudaGetErrorString(cudaStat));
-        mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
-}
-
 // Get pitched pointer to alpha and beta in host memory
 cudaPitchedPtr hp_alpha_x = make_cudaPitchedPtr((void*) h_alpha_x, nx * sizeof(float), nx, ny);
 cudaPitchedPtr hp_alpha_y = make_cudaPitchedPtr((void*) h_alpha_y, nx * sizeof(float), nx, ny);
@@ -339,9 +300,6 @@ cudaPitchedPtr hp_alpha_z = make_cudaPitchedPtr((void*) h_alpha_z, nx * sizeof(f
 cudaPitchedPtr hp_beta_x = make_cudaPitchedPtr((void*) h_beta_x, nx * sizeof(float), nx, ny);
 cudaPitchedPtr hp_beta_y = make_cudaPitchedPtr((void*) h_beta_y, nx * sizeof(float), nx, ny);
 cudaPitchedPtr hp_beta_z = make_cudaPitchedPtr((void*) h_beta_z, nx * sizeof(float), nx, ny);
-cudaPitchedPtr hp_const_x = make_cudaPitchedPtr((void*) h_const_x, nx * sizeof(float), nx, ny);
-cudaPitchedPtr hp_const_y = make_cudaPitchedPtr((void*) h_const_y, nx * sizeof(float), nx, ny);
-cudaPitchedPtr hp_const_z = make_cudaPitchedPtr((void*) h_const_z, nx * sizeof(float), nx, ny);
 // Copy alpha and beta to texture memory from pitched pointer
 cudaMemcpy3DParms copyParams = {0};
 copyParams.extent = extent_img;
@@ -407,35 +365,6 @@ if (cudaStat != cudaSuccess) {
         mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
 }
 
-//const_x
-copyParams.srcPtr = hp_const_x;
-copyParams.dstArray = d_const_x;
-cudaStat = cudaMemcpy3D(&copyParams);
-if (cudaStat != cudaSuccess) {
-	mexPrintf("Failed to copy const_x to device memory.\n");
-	mexPrintf("Error code %d: %s\n",cudaStat,cudaGetErrorString(cudaStat));
-        mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
-}
-
-//const_y
-copyParams.srcPtr = hp_const_y;
-copyParams.dstArray = d_const_y;
-cudaStat = cudaMemcpy3D(&copyParams);
-if (cudaStat != cudaSuccess) {
-	mexPrintf("Failed to copy const_y to device memory.\n");
-	mexPrintf("Error code %d: %s\n",cudaStat,cudaGetErrorString(cudaStat));
-        mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
-}
-
-//const_z
-copyParams.srcPtr = hp_const_z;
-copyParams.dstArray = d_const_z;
-cudaStat = cudaMemcpy3D(&copyParams);
-if (cudaStat != cudaSuccess) {
-	mexPrintf("Failed to copy const_z to device memory.\n");
-	mexPrintf("Error code %d: %s\n",cudaStat,cudaGetErrorString(cudaStat));
-        mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
-}
 // create texture object alpha and beta
 cudaResourceDesc resDesc;
 cudaTextureDesc texDesc, texDesc2;
@@ -523,22 +452,6 @@ resDesc.res.array.array = d_beta_z;
 cudaTextureObject_t tex_beta_z = 0;
 cudaCreateTextureObject(&tex_beta_z, &resDesc, &texDesc, NULL);
 
-// const_x
-resDesc.res.array.array = d_const_x;
-cudaTextureObject_t tex_const_x = 0;
-cudaCreateTextureObject(&tex_const_x, &resDesc, &texDesc, NULL);
-
-
-// const_y
-resDesc.res.array.array = d_const_y;
-cudaTextureObject_t tex_const_y = 0;
-cudaCreateTextureObject(&tex_const_y, &resDesc, &texDesc, NULL);
-
-
-// const_z
-resDesc.res.array.array = d_const_z;
-cudaTextureObject_t tex_const_z = 0;
-cudaCreateTextureObject(&tex_const_z, &resDesc, &texDesc, NULL);
 // malloc in device: projection of the whole bin
 float *d_proj;
 cudaMalloc((void**)&d_proj, numBytesProj);
@@ -646,7 +559,7 @@ for (int ibin = 0; ibin < n_bin; ibin++){
         // cudaMemcpy(d_img1, h_img, numBytesImg, cudaMemcpyHostToDevice);
         volume = ref_volumes[ibin];
         flow = ref_flows[ibin];
-        kernel_forwardDVF<<<gridSize_img, blockSize>>>(d_mx, d_my, d_mz, tex_alpha_x, tex_alpha_y, tex_alpha_z, tex_beta_x, tex_beta_y, tex_beta_z, tex_const_x, tex_const_y, tex_const_z, volume, flow, nx, ny, nz);
+        kernel_forwardDVF<<<gridSize_img, blockSize>>>(d_mx, d_my, d_mz, tex_alpha_x, tex_alpha_y, tex_alpha_z, tex_beta_x, tex_beta_y, tex_beta_z, volume, flow, nx, ny, nz);
         cudaDeviceSynchronize();
 
         // copy img to pitched pointer and bind it to a texture object
@@ -677,7 +590,7 @@ for (int ibin = 0; ibin < n_bin; ibin++){
             flow = ref_flows[ibin] - flows[i_view];
             
             // generate forwards DVFs: d_mx, d_my, d_mz and inverted DVFs: d_mx2, d_my2, d_mz2
-            kernel_forwardDVF<<<gridSize_img, blockSize>>>(d_mx, d_my, d_mz, tex_alpha_x, tex_alpha_y, tex_alpha_z, tex_beta_x, tex_beta_y, tex_beta_z, tex_const_x, tex_const_y, tex_const_z, volume, flow, nx, ny, nz);
+            kernel_forwardDVF<<<gridSize_img, blockSize>>>(d_mx, d_my, d_mz, tex_alpha_x, tex_alpha_y, tex_alpha_z, tex_beta_x, tex_beta_y, tex_beta_z, volume, flow, nx, ny, nz);
             cudaDeviceSynchronize();
             
             // copy mx etc to pitched pointer and bind it to a texture object
@@ -873,9 +786,6 @@ cudaDestroyTextureObject(tex_alpha_z);
 cudaDestroyTextureObject(tex_beta_x);
 cudaDestroyTextureObject(tex_beta_y);
 cudaDestroyTextureObject(tex_beta_z);
-cudaDestroyTextureObject(tex_const_x);
-cudaDestroyTextureObject(tex_const_y);
-cudaDestroyTextureObject(tex_const_z);
 cudaDestroyTextureObject(tex_img);
 cudaDestroyTextureObject(tex_mx);
 cudaDestroyTextureObject(tex_my);
@@ -890,9 +800,6 @@ cudaFreeArray(d_alpha_z);
 cudaFreeArray(d_beta_x);
 cudaFreeArray(d_beta_y);
 cudaFreeArray(d_beta_z);
-cudaFreeArray(d_const_x);
-cudaFreeArray(d_const_y);
-cudaFreeArray(d_const_z);
 // cudaFreeArray(d_img);
 cudaFree(d_mx);
 cudaFree(d_my);

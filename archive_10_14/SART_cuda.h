@@ -24,7 +24,7 @@
 #include "kernel_projection.h" // kernel_projection(d_proj, d_img, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
 #include "kernel_backprojection.h" // kernel_backprojection(d_img, d_proj, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
 #include "kernel_deformation.h" // kernel_deformation(float *img1, float *img, float *mx2, float *my2, float *mz2, int nx, int ny, int nz);
-#include "kernel_forwardDVF.h" // kernel_forwardDVF(float *mx, float *my, float *mz, cudaTextureObject_t alpha_x, cudaTextureObject_t alpha_y, cudaTextureObject_t alpha_z, cudaTextureObject_t beta_x, cudaTextureObject_t beta_y, cudaTextureObject_t beta_z,   cudaTextureObject_t const_x, cudaTextureObject_t const_y, cudaTextureObject_t const_z, float volume, float flow, int nx, int ny, int nz);
+#include "kernel_forwardDVF.h" // kernel_forwardDVF(float *mx, float *my, float *mz, cudaTextureObject_t alpha_x, cudaTextureObject_t alpha_y, cudaTextureObject_t alpha_z, cudaTextureObject_t beta_x, cudaTextureObject_t beta_y, cudaTextureObject_t beta_z, float volume, float flow, int nx, int ny, int nz);
 #include "kernel_invertDVF.h" //__global__ kernel_invertedDVF(float *mx2, float *my2, float *mz2, cudaTextureObject_t alpha_x, cudaTextureObject_t alpha_y, cudaTextureObject_t alpha_z, cudaTextureObject_t beta_x, cudaTextureObject_t beta_y, cudaTextureObject_t beta_z, int nx, int ny, int nz, int niter);
 
 // Cuda Error Checking macro
