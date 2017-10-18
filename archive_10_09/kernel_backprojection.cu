@@ -212,4 +212,5 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
             }
         }       
     }
+    img[id] /= maxcsphi;
 }

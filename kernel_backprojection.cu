@@ -20,6 +20,7 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
     angle += PI;
     cphi = (float)cosf(angle);
     sphi = (float)sinf(angle);
+    float maxcsphi = MAX(ABS(cphi), ABS(sphi));
 
     x1 = -SO * cphi;
     y1 = -SO * sphi;
@@ -212,4 +213,5 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
             }
         }       
     }
+    img[id] /= maxcsphi;
 }
