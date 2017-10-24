@@ -1,11 +1,292 @@
 // past distance driven
 #include <math.h>
-#define ABS(x) ((x) > 0 ? (x) : - (x))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define PI 3.141592653589793
 
-__global__ void kernel_backprojection(float *img, float *proj, float angle, float SO, float SD, float da, int na, float ai, float db, int nb, float bi, int nx, int ny, int nz){
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#define ABS(x) ((x) > 0 ? (x) : -(x))
+#define PI 3.141592653589793f
+// #include "dist_cuda_functions.h"
+
+__device__ void get_uv_ind_flat(int* uvInd, float u, float v, float du, float dv, float nu, float nv){
+
+	// get index of detector element
+	uvInd[0] = (int) floorf((u / du) + (nu/2) + 0.0f);
+	uvInd[1] = (int) floorf((v / dv) + (nv/2) + 0.0f);
+
+	//uvInd[0] = floorf((u / dv) + (nv/2) + 0.0f);
+	//uvInd[1] = floorf((v / du) + (nu/2) + 0.0f);
+}
+// Find intersection of a line with detector plane
+__device__ void get_intersection_line_plane(float* intersection, float* p1, float* p2, float* x0, float* n){
+
+	// p1: first point on line
+	// p2: second point on line
+	// x0: point on plane
+	// n: normal vector to plane (normalized or not)
+
+	float r;
+	float dot_plane;
+	float dot_line;
+
+	dot_plane = (n[0] * (x0[0] - p1[0])) + (n[1] * (x0[1] - p1[1])) + (n[2] * (x0[2] - p1[2]));
+	dot_line = (n[0] * (p2[0] - p1[0])) + (n[1] * (p2[1] - p1[1])) + (n[2] * (p2[2] - p1[2]));
+
+	r = dot_plane / dot_line;
+
+	intersection[0] = p1[0] + r * (p2[0] - p1[0]);
+	intersection[1] = p1[1] + r * (p2[1] - p1[1]);
+	intersection[2] = p1[2] + r * (p2[2] - p1[2]);
+
+}
+
+// Convert from world x,y,z to detector plane u,v coordinates
+ __device__ void xyz2uv(float*uv, float* x, float* x0, float* u1, float* v1){
+
+	// returns distance along u1, and v1 from central_detector_array_position in units of mm (dx = dy = dz = 1 mm)
+	float x1[3];
+
+	x1[0] = x[0] - x0[0];
+	x1[1] = x[1] - x0[1];
+	x1[2] = x[2] - x0[2];
+
+	uv[0] = (x1[0] * u1[0]) + (x1[1] * u1[1]) + (x1[2] * u1[2]);
+	uv[1] = (x1[0] * v1[0]) + (x1[1] * v1[1]) + (x1[2] * v1[2]);
+}
+__device__ void get_uv_ranges(float* uMin, float* uMax, float* vMin, float* vMax, float* uv, float* dd_intersection, float* a1, float* a2, float* z1, float* z2, float* dd_sourcePosition, float* dd_centralDetectorPosition, float* u1, float* v1, float* dd_helical_detector_vector){
+
+
+	float iu1, iu2, iu3, iu4;
+	float iv1, iv2, iv3, iv4;
+//	float iv1, iv2;
+	float tmp;
+
+	get_intersection_line_plane(dd_intersection, dd_sourcePosition, a1, dd_centralDetectorPosition, dd_helical_detector_vector);
+//	xyz2uv(uv, dd_intersection, dd_helical_detector_vector, u1, v1);
+	xyz2uv(uv, dd_intersection, dd_centralDetectorPosition, u1, v1);
+	iu1 = uv[0];
+	iv1 = uv[1];
+
+	get_intersection_line_plane(dd_intersection, dd_sourcePosition, a2, dd_centralDetectorPosition, dd_helical_detector_vector);
+	xyz2uv(uv, dd_intersection, dd_centralDetectorPosition, u1, v1);
+	//xyz2uv(uv, dd_intersection, dd_helical_detector_vector, u1, v1);
+	iu2 = uv[0];
+	iv2 = uv[1];
+
+	get_intersection_line_plane(dd_intersection, dd_sourcePosition, z1, dd_centralDetectorPosition, dd_helical_detector_vector);
+	xyz2uv(uv, dd_intersection, dd_centralDetectorPosition, u1, v1);
+	//xyz2uv(uv, dd_intersection, dd_helical_detector_vector, u1, v1);
+	iu3 = uv[0];
+	iv3 = uv[1];
+
+	get_intersection_line_plane(dd_intersection, dd_sourcePosition, z2, dd_centralDetectorPosition, dd_helical_detector_vector);
+	xyz2uv(uv, dd_intersection, dd_centralDetectorPosition, u1, v1);
+	//xyz2uv(uv, dd_intersection, dd_helical_detector_vector, u1, v1);
+	iu4 = uv[0];
+	iv4 = uv[1];
+
+	tmp = MIN(iu1,iu2);
+	tmp = MIN(tmp,iu3);
+	*uMin = MIN(tmp, iu4);
+
+	tmp = MAX(iu1, iu2);
+	tmp = MAX(tmp,iu3);
+	*uMax = MAX(tmp, iu4);
+
+	tmp = MIN(iv1,iv2);
+	tmp = MIN(tmp,iv3);
+	*vMin = MIN(tmp, iv4);
+
+	tmp = MAX(iv1, iv2);
+	tmp = MAX(tmp,iv3);
+	*vMax = MAX(tmp, iv4);
+}
+
+__device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float angle, float SO, float SD, float nu, float nv, float du, float dv, float nx, float ny, float nz, int ix, int iy, int iz)
+{
+    value[0] = 0.0f;
+    float dd_voxel[3];
+	dd_voxel[0] = (float)ix - (nx/2) + 0.5f;
+	dd_voxel[1] = (float)iy - (ny/2) + 0.5f;
+	dd_voxel[2] = (float)iz - (nz/2) + 0.5f;
+
+	// voxel boundary coordinates
+	float a1[3];
+	float a2[3];
+	float z1[3];
+	float z2[3];
+
+	//intermediate variables
+	float uMin, uMax;
+	float vMin, vMax;
+	float dd_uv[2];
+
+	float uMinInd, uMaxInd;
+	int vMinInd, vMaxInd;
+
+	float uBound1, uBound2;
+	float vBound1, vBound2;
+
+
+	float wu, wv, w;
+
+	float dd_centralDetectorPosition_rotated[3];
+	float dd_sourcePosition_rotated[3];
+
+	float dd_intersection[3];
+
+	float u1_rotated[3];
+	float v1_rotated[3];
+	int dd_uvInd[2];
+
+	// Helical scan?
+	float dd_helical_detector_vector[3];
+	// Normalize? 
+
+	float tmp;
+
+	//Loop counters
+	int iV, iU;
+
+	// Rotate to phi = 0
+	float sphi = 0.0f;
+	float cphi = 1.0f;
+	float* dd_cos = &cphi;
+	float* dd_sin = &sphi;
+    __sincosf(angle, dd_sin, dd_cos); 
+	dd_centralDetectorPosition_rotated[0] = (SD - SO) * - 1;
+	dd_centralDetectorPosition_rotated[1] = 0;
+	dd_centralDetectorPosition_rotated[2] = 0;
+
+	dd_sourcePosition_rotated[0] = SO;
+	dd_sourcePosition_rotated[1] = 0;
+	dd_sourcePosition_rotated[2] = 0;
+
+	u1_rotated[0] = 0.0f;
+	u1_rotated[1] = 0.0f;
+	u1_rotated[2] = 1.0f;
+
+	v1_rotated[0] = 0.0f;
+	v1_rotated[1] = 1.0f;
+	v1_rotated[2] = 0.0f;
+
+	dd_helical_detector_vector[0] = dd_centralDetectorPosition_rotated[0];
+	dd_helical_detector_vector[1] = dd_centralDetectorPosition_rotated[1];
+	dd_helical_detector_vector[2] = 0;
+
+
+	// cos and sin of projection angle
+    // sphi = (float)sinf(angle);
+    // cphi = (float)cosf(angle);
+
+	// get rotated coordinates of voxel edges:
+	//left
+	a1[0] = dd_voxel[0] * cphi + dd_voxel[1] * sphi;
+	a1[1] = dd_voxel[0] * -1 * sphi + dd_voxel[1] * cphi;
+	a1[2] = dd_voxel[2];
+
+	a1[1] = a1[1] - 0.5f;
+	a1[0] = a1[0] - 0.5f;
+
+	// right
+	a2[0] = dd_voxel[0] * cphi + dd_voxel[1] * sphi;
+	a2[1] = dd_voxel[0] * -1 * sphi + dd_voxel[1] * cphi;
+	a2[2] = dd_voxel[2];
+
+	a2[1] = a2[1] + 0.5f;
+	a2[0] = a2[0] + 0.5f;
+
+	//lower
+	z1[0] = (dd_voxel[0] * cphi) + (dd_voxel[1] * sphi);
+	z1[1] = -1 * (dd_voxel[0] * sphi) + (dd_voxel[1] * cphi);
+	z1[2] = dd_voxel[2] - 0.5f;
+
+	//upper
+	z2[0] = (dd_voxel[0] * cphi) + (dd_voxel[1] * sphi);
+	z2[1] = -1 * (dd_voxel[0] * sphi) + (dd_voxel[1] * cphi);
+	z2[2] = dd_voxel[2] + 0.5f;
+
+      // get intersection of ray from source through voxel edges and detector plane to find shadow region of this voxel
+	get_uv_ranges(&uMin, &uMax, &vMin, &vMax, dd_uv, dd_intersection, a1, a2, z1, z2, dd_sourcePosition_rotated, dd_centralDetectorPosition_rotated, u1_rotated, v1_rotated,dd_helical_detector_vector);
+
+      // convert from distance in voxel spacing (1mm) from detector array center in u and v to element indices (1,2,etc..)
+	get_uv_ind_flat(dd_uvInd, uMin, vMin, du, dv, nu, nv);
+	uMinInd = dd_uvInd[0];
+	vMinInd = dd_uvInd[1];
+	
+	get_uv_ind_flat(dd_uvInd, uMax, vMax, du, dv, nu, nv);
+	uMaxInd = dd_uvInd[0];
+	vMaxInd = dd_uvInd[1];
+	
+	if(uMin > uMax){
+		tmp = uMin;
+		uMin = uMax;
+		uMax = tmp;}
+	
+	if(vMin > vMax){
+		tmp = vMin;
+		vMin = vMax;
+		vMax = tmp;}
+	
+	// loop over detectors in the shadow region of this voxel
+	for (iV = MAX(0,vMinInd); iV <= MIN(vMaxInd, ((int)nv-1)); iV++){
+	for (iU = MAX(0,uMinInd); iU <= MIN(uMaxInd, ((int)nu-1)); iU++){
+
+
+		vBound1 = ((float)iV - 0.5f - (nv/2) + 0.5f) * dv;
+		vBound2 = ((float)iV + 0.5f - (nv/2) + 0.5f) * dv;
+
+		// v weight
+		wv = 0;
+			if ( (vBound1 < vMin) && (vMax >= vBound2) ){
+			wv = (vBound2 - vMin) / dv;
+			}
+
+			else if ( (vBound1 < vMin) && (vMax < vBound2) ){
+			wv = (vMax - vMin) / dv;
+			}
+
+			else if ( (vBound2 > vMax) && (vMin <= vBound1) ) {
+			wv = (vMax - vBound1) / dv;
+			}
+
+			else{
+			wv = 1;
+			}
+
+		uBound1 = (iU - 0.5f - (nu/2) + 0.5f) * du;
+		uBound2 = (iU + 0.5f - (nu/2) + 0.5f) * du;
+
+		// u weight
+		wu = 0;
+
+			if ( (uBound1 < uMin) && (uMax > uBound2) ){
+			wu = (uBound2 - uMin) / du;
+			}
+
+			else if ( (uBound1 < uMin) && (uMax <= uBound2) ){
+
+			//wu = 1;
+			wu = (uMax - uMin) / du;
+			}
+
+			else if ( (uBound2 > uMax) && (uMin <= uBound1) ) {
+			wu = (uMax - uBound1) / du;
+			}
+
+			else{
+			wu = 1;
+			}
+
+		w = wu * wv;
+
+		value[0] += w * tex3D<float>(tex_proj,(iU + 0.5f), (iV + 0.5f), 0.5f);
+
+// end loop over detectors
+	}
+	}
+}
+
+__global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, float SO, float SD, float nu, float nv, float du, float dv, float nx, float ny, float nz){
     int ix = 16 * blockIdx.x + threadIdx.x;
     int iy = 16 * blockIdx.y + threadIdx.y;
     int iz = 4 * blockIdx.z + threadIdx.z;
@@ -13,205 +294,50 @@ __global__ void kernel_backprojection(float *img, float *proj, float angle, floa
         return;
     int id = ix + iy * nx + iz * nx * ny;
     img[id] = 0.0f;
-    float cphi, sphi,x1, y1, z1, x20, y20, x2, y2, z2, x2n, y2n, z2n, x2m, y2m, p2x, p2y, p2z, p2xn, p2yn, p2zn, ptmp;
-    float ds, dt, temp, dst, det;
-    float xc, yc, zc, xcn, ycn, zcn, xcm, ycm, xc0, yc0;
-    float as, ae, bs, be, atmp, btmp, dsp, dtp, L;
-    angle += PI;
-    cphi = (float)cosf(angle);
-    sphi = (float)sinf(angle);
-    float maxcsphi = MAX(ABS(cphi), ABS(sphi));
-
-    x1 = -SO * cphi;
-    y1 = -SO * sphi;
-    z1 = 0.0f;
-    if (ABS(sphi) < 0.7071)
-    {
-        xc = ix - nx / 2 + 0.5f;
-
-        yc = iy - ny / 2;
-        ycn = iy - ny / 2 + 1.0f;
-        ycm = (yc + ycn) / 2;
-        xc0 = cphi * xc + sphi * yc + SO;
-        yc0 = -sphi * xc + cphi * yc;
-        as = yc0 / xc0 * SD / da - ai + 0.5f;
-        xc0 = cphi * xc + sphi * ycn + SO;
-        yc0 = -sphi * xc + cphi * ycn;
-        ae = yc0 / xc0 * SD / da - ai + 0.5f;
-        if (as > ae)
-        {atmp = as; as = ae; ae = atmp;}
-        if (ae < 0.0f || as >= (float)na)
-            return;
-        if (as < 0.0f)
-            as = 0.0f;
-        if (ae >= na)
-            ae = float(na);
-
-        zc = iz - nz / 2;
-        zcn = iz - nz / 2 + 1.0f;
-        xc0 = cphi * xc + sphi * ycm;
-        yc0 = -sphi * xc + cphi * ycm;
-        L = (float)sqrt((xc0 + SO) * (xc0 + SO) + yc0 * yc0);
-        bs = (zc - z1) / L * SD / db - bi + 0.5f;
-        be = (zcn - z1) / L * SD / db - bi + 0.5f;
-
-        if (bs > be)
-        {btmp = bs; bs = be; be = btmp;}
-        if (be < 0.0f || bs >= (float)nb)
-            return;
-        if (bs < 0.0f)
-            bs = 0.0f;
-        if (be >= nb)
-            be = float(nb);
-        for (int ia = (int)floor(as); ia < (int)ceil(ae); ia++)
-        {
-            x20 = SD - SO;
-            y20 = (ia + ai - 0.5f) * da;
-            x2 = x20 * cphi - y20 * sphi;
-            y2 = x20 * sphi + y20 * cphi;
-            x20 = SD - SO;
-            y20 = (ia + ai + 0.5f) * da;
-            x2n = x20 * cphi - y20 * sphi;
-            y2n = x20 * sphi + y20 * cphi;
-            x2m = (x2 + x2n) / 2;
-            y2m = (y2 + y2n) / 2;
-            temp = (y2 - y1) / (x2 - x1);
-            p2y = (ix + 0.5f - nx / 2 - x1) * temp + y1 + ny / 2;
-            temp = (y2n - y1) / (x2n - x1);
-            p2yn = (ix + 0.5f - nx / 2 - x1) * temp + y1 + ny / 2;
-            if (p2y > p2yn)
-            {ptmp = p2y; p2y = p2yn; p2yn = ptmp;}
-            dst = p2yn - p2y;
-            if (p2yn < 0.0f)
-                continue;
-            if (p2y >= (float)ny)
-                continue;
-            if (p2y < 0.0f)
-                p2y = 0.0f;
-            if (p2yn >= ny)
-                p2yn = float(ny);
-            dsp = MIN(p2yn, iy + 1) - MAX(iy, p2y); ds = dsp / dst;
-            if (dsp < 0)
-                continue;
-            for (int ib = (int)floor(bs); ib < (int)ceil(be); ib++)
-            {
-                z2 = (bi + ib - 0.5f) * db;
-                z2n = (bi + ib + 0.5f) * db;
-                temp = (z2 - z1) / (x2m - x1);
-                p2z = (ix + 0.5f - nx / 2 - x1) * temp + z1 + nz / 2;
-                temp = (z2n - z1) / (x2m - x1);
-                p2zn = (ix + 0.5f - nx / 2 - x1) * temp + z1 + nz / 2;
-                if (p2z > p2zn)
-                {ptmp = p2z; p2z = p2zn; p2zn = ptmp;}                            
-                det = p2zn - p2z;
-                if (p2zn < 0.0f)
-                    continue;
-                if (p2z >= (float)nz)
-                    continue;
-                if (p2z < 0.0f)
-                    p2z = 0.0f;
-                if (p2zn > nz)
-                    p2zn = float(nz);
-                //dt = MIN(p2zn, iz + 1) - MAX(iz, p2z); dt /= det;
-                dtp = MIN(p2zn, iz + 1) - MAX(iz, p2z); dt = dtp / det;
-                if (dtp < 0)
-                    continue;
-                img[id] += (proj[ib + (na - 1 - ia) * na] * ds * dt);
-            }
-        }                                    
-    }
-    else
-    {
-        yc = iy - ny / 2 + 0.5f;
-        xc = ix - nx / 2;
-        xcn = ix - nx / 2 + 1.0f;
-        xcm = (xc + xcn) / 2;
-        xc0 = cphi * xc + sphi * yc + SO;
-        yc0 = -sphi * xc + cphi * yc;
-        as = yc0 / xc0 * SD / da - ai + 0.5f;
-        xc0 = cphi * xcn + sphi * yc + SO;
-        yc0 = -sphi * xcn + cphi * yc;
-        ae = yc0 / xc0 * SD / da - ai + 0.5f;
-        if (as > ae)
-        {atmp = as; as = ae; ae = atmp;}
-        if (ae < 0.0f || as >= (float)na)
-            return;              
-        if (as < 0.0f)
-            as = 0.0f;
-        if (ae >= na)
-            ae = float(na);
-        zc = iz - nz / 2;
-        zcn = iz - nz / 2 + 1.0f;
-        xc0 = cphi * xcm + sphi * yc;
-        yc0 = -sphi * xcm + cphi * yc;
-        L = (float)sqrt((xc0 + SO) * (xc0 + SO) + yc0 * yc0);
-        bs = (zc - z1) / L * SD / db - bi + 0.5f;
-        be = (zcn - z1) / L * SD / db - bi + 0.5f;
-        if (bs > be)
-        {btmp = bs; bs = be; be = btmp;}
-        if (be < 0.0f || bs >= (float)nb)
-            return;
-        if (bs < 0.0f)
-            bs = 0.0f;
-        if (be >= nb)
-            be = float(nb);
-
-        for (int ia = (int)floor(as); ia < (int)ceil(ae); ia++)
-        {
-            x20 = SD - SO;
-            y20 = (ia + ai - 0.5f) * da;
-            x2 = x20 * cphi - y20 * sphi;
-            y2 = x20 * sphi + y20 * cphi;
-            x20 = SD - SO;
-            y20 = (ia + ai + 0.5f) * da;
-            x2n = x20 * cphi - y20 * sphi;
-            y2n = x20 * sphi + y20 * cphi;
-            x2m = (x2 + x2n) / 2;
-            y2m = (y2 + y2n) / 2;
-            temp = (x2 - x1) / (y2 - y1);
-            p2x = (iy + 0.5f - ny / 2 - y1) * temp + x1 + nx / 2;
-            temp = (x2n - x1) / (y2n - y1);
-            p2xn = (iy + 0.5f - ny / 2 - y1) * temp + x1 + nx / 2;
-            if (p2x > p2xn)
-            {ptmp = p2x; p2x = p2xn; p2xn = ptmp;}
-            dst = p2xn - p2x;
-            if (p2xn < 0.0f)
-                continue;
-            if (p2x >= (float)nx)
-                continue;
-            if (p2x < 0.0f)
-                p2x = 0.0f;
-            if (p2xn >= nx)
-                p2xn = float(nx);
-            dsp = MIN(p2xn, ix + 1) - MAX(ix, p2x); ds = dsp / dst;
-            if (dsp < 0)
-                continue;
-            for (int ib = (int)floor(bs); ib < (int)ceil(be); ib++)
-            {
-                z2 = (bi + ib - 0.5f) * db;
-                z2n = (bi + ib + 0.5f) * db;
-                temp = (z2 - z1) / (y2m - y1);
-                p2z = (iy + 0.5f - ny / 2 - y1) * temp + z1 + nz / 2;
-                temp = (z2n - z1) / (y2m - y1);
-                p2zn = (iy + 0.5f - ny / 2 - y1) * temp + z1 + nz / 2;
-                if (p2z > p2zn)
-                {ptmp = p2z; p2z = p2zn; p2zn = ptmp;}                            
-                det = p2zn - p2z;
-                if (p2zn < 0.0f)
-                    continue;
-                if (p2z >= (float)nz)
-                    continue;
-                if (p2z < 0.0f)
-                    p2z = 0.0f;
-                if (p2zn > nz)
-                    p2zn = float(nz);
-                //dt = MIN(p2zn, iz + 1) - MAX(iz, p2z); dt /= det;
-                dtp = MIN(p2zn, iz + 1) - MAX(iz, p2z); dt = dtp / det;
-                if (dtp < 0)
-                    continue;
-                img[id] += (proj[ib + (na - 1 - ia) * na] * ds * dt);
-            }
-        }       
-    }
-    img[id] /= maxcsphi;
+    kernel_kernel(&img[id], tex_proj, angle, SO, SD, nu, nv, du, dv, nx, ny, nz, ix, iy ,iz);
+    // world coordinates for this voxel
+	
 }
+
+
+__host__ void kernel_backprojection(float *img, float *proj, float angle, float SO, float SD, float da, int na, float ai, float db, int nb, float bi, int nx, int ny, int nz)
+{
+    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
+    struct cudaExtent extent = make_cudaExtent(nb, na, 1);
+    cudaArray *array_proj;
+    cudaMalloc3DArray(&array_proj, &channelDesc, extent);
+    cudaMemcpy3DParms copyParams = {0};
+    cudaPitchedPtr dp_proj = make_cudaPitchedPtr((void*) proj, nb * sizeof(float), nb, na);
+    copyParams.extent = extent;
+    copyParams.kind = cudaMemcpyDeviceToDevice;
+    copyParams.srcPtr = dp_proj;
+    copyParams.dstArray = array_proj;
+    cudaMemcpy3D(&copyParams);
+
+
+    cudaResourceDesc resDesc;
+    cudaTextureDesc texDesc;
+    memset(&resDesc, 0, sizeof(resDesc));
+    resDesc.resType = cudaResourceTypeArray;
+
+    memset(&texDesc, 0, sizeof(texDesc));
+    texDesc.addressMode[0] = cudaAddressModeBorder;
+    texDesc.addressMode[1] = cudaAddressModeBorder;
+    texDesc.addressMode[2] = cudaAddressModeBorder;
+    texDesc.filterMode = cudaFilterModeLinear;
+    texDesc.readMode = cudaReadModeElementType;
+    texDesc.normalizedCoords = 0;
+    resDesc.res.array.array = array_proj;
+    cudaTextureObject_t tex_proj = 0;
+    cudaCreateTextureObject(&tex_proj, &resDesc, &texDesc, NULL);
+
+    const dim3 gridSize_singleProj((nx + 16 - 1) / 16, (ny + 16 - 1) / 16, (nz + 3) / 4);
+    const dim3 blockSize(16, 16, 4);
+    kernel<<<gridSize_singleProj, blockSize>>>(img, tex_proj, angle, SO, SD, nb, na, da, db, nx, ny, nz);
+    cudaDeviceSynchronize();
+
+    cudaFreeArray(array_proj);
+    cudaDestroyTextureObject(tex_proj);
+
+}
+

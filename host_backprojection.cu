@@ -45,7 +45,7 @@ cudaMemcpy(d_proj, h_proj, na * nb * sizeof(float), cudaMemcpyHostToDevice);
 
 const dim3 gridSize((nx + BLOCKWIDTH - 1) / BLOCKWIDTH, (ny + BLOCKHEIGHT - 1) / BLOCKHEIGHT, (nz + BLOCKDEPTH - 1) / BLOCKDEPTH);
 const dim3 blockSize(BLOCKWIDTH,BLOCKHEIGHT, BLOCKDEPTH);
-kernel_backprojection<<<gridSize, blockSize>>>(d_img, d_proj, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
+kernel_backprojection(d_img, d_proj, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
 cudaMemcpy(h_img, d_img, nx * ny * nz * sizeof(float), cudaMemcpyDeviceToHost);
 cudaFree(d_proj);
 cudaFree(d_img);

@@ -1,1 +1,0 @@
-__global__ void kernel_deformation(float *img1, float *img, float *mx2, float *my2, float *mz2, int nx, int ny, int nz);

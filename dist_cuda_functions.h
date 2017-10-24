@@ -1,3 +1,5 @@
+#ifndef _DIST_CUDA_FUNCTIONS_H
+#define _DIST_CUDA_FUNCTIONS_H
 #include <stdlib.h>
 #include <cuda_runtime.h>
 #include <math.h>
@@ -101,3 +103,4 @@ __global__ void copy_kernel(float* hd_volume, cudaTextureObject_t tex_volume);
 
 void dist_sart_launcher(float* hh_volume, float* hh_projections, float* hh_sourcePhi, float* hh_sourceZ, float* hh_SI, float* hh_DI, float* hh_du, float* hh_dv, size_t nu, size_t nv, size_t nx, size_t ny, size_t nz, size_t nt, size_t nBytesTimepointVector, float* hh_geometry, size_t nBytesGeometry, size_t nBytesVolume, float lamda, size_t nSubsets, size_t ntSubset, int nIterations);
 void dist_back_project_mag(float* hh_volume, float* hh_projections, float* hh_sourcePhi, float* hh_sourceZ, float* hh_SI, float* hh_DI, float* hh_du, float* hh_dv, size_t nu, size_t nv, size_t nx, size_t ny, size_t nz, size_t nt, size_t nBytesTimepointVector, float* hh_geometry, size_t nBytesGeometry, size_t nBytesVolume);
+#endif

@@ -8,12 +8,13 @@ static const int YZ_PLANE = 1;
 __constant__ float hdc_geometry[N_GEOMETRY_CONSTANTS];
 
 // Get coordinates of the central point of detector array (same for planar and arc)
- __device__ void get_central_detector_array_position(float* dd_centralDetectorPosition, float* dd_sourcePosition, float cosPhi, float sinPhi, float SD, float SO, float sourceZ){
+ __device__ void get_central_detector_array_position(float* dd_centralDetectorPosition, float* dd_sourcePosition, float cosPhi, float sinPhi, float DI, float sourceZ){
 
-	dd_centralDetectorPosition[0] = cosPhi * (SD - SO) * - 1;
-	dd_centralDetectorPosition[1] = sinPhi * (SD - SO) * - 1;
+	dd_centralDetectorPosition[0] = cosPhi * DI * - 1;
+	dd_centralDetectorPosition[1] = sinPhi * DI * - 1;
 	dd_centralDetectorPosition[2] = sourceZ;
 }
+
 
 // Convert from world x,y,z to detector plane u,v coordinates
  __device__ void xyz2uv(float*uv, float* x, float* x0, float* u1, float* v1){

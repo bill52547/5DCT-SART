@@ -1,1 +1,0 @@
-__global__ void kernel_update(float *img1, float *img, int nx, int ny, int nz, float lambda);
