@@ -7,11 +7,11 @@
 #define PI 3.141592653589793f
 // #include "dist_cuda_functions.h"
 
-__device__ void get_uv_ind_flat(int* uvInd, float u, float v, float du, float dv, float nu, float nv){
+__device__ void get_uv_ind_flat(int* uvInd, float u, float v, float du, float dv, float nu, float nv, float ui, float vi){
 
 	// get index of detector element
-	uvInd[0] = (int) floorf((u / du) + (nu/2) + 0.0f);
-	uvInd[1] = (int) floorf((v / dv) + (nv/2) + 0.0f);
+	uvInd[0] = (int) floorf((u / du) - ui - 0.5f);
+	uvInd[1] = (int) floorf((v / dv) - vi - 0.5f);
 
 	//uvInd[0] = floorf((u / dv) + (nv/2) + 0.0f);
 	//uvInd[1] = floorf((v / du) + (nu/2) + 0.0f);
@@ -101,7 +101,7 @@ __device__ void get_uv_ranges(float* uMin, float* uMax, float* vMin, float* vMax
 	*vMax = MAX(tmp, iv4);
 }
 
-__device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float angle, float SO, float SD, float nu, float nv, float du, float dv, float nx, float ny, float nz, int ix, int iy, int iz)
+__device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float angle, float SO, float SD, float nu, float nv, float du, float dv, float ui, float vi, float nx, float ny, float nz, int ix, int iy, int iz)
 {
     value[0] = 0.0f;
     float dd_voxel[3];
@@ -209,11 +209,11 @@ __device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float 
 	get_uv_ranges(&uMin, &uMax, &vMin, &vMax, dd_uv, dd_intersection, a1, a2, z1, z2, dd_sourcePosition_rotated, dd_centralDetectorPosition_rotated, u1_rotated, v1_rotated,dd_helical_detector_vector);
 
       // convert from distance in voxel spacing (1mm) from detector array center in u and v to element indices (1,2,etc..)
-	get_uv_ind_flat(dd_uvInd, uMin, vMin, du, dv, nu, nv);
+	get_uv_ind_flat(dd_uvInd, uMin, vMin, du, dv, nu, nv, ui, vi);
 	uMinInd = dd_uvInd[0];
 	vMinInd = dd_uvInd[1];
 	
-	get_uv_ind_flat(dd_uvInd, uMax, vMax, du, dv, nu, nv);
+	get_uv_ind_flat(dd_uvInd, uMax, vMax, du, dv, nu, nv, ui, vi);
 	uMaxInd = dd_uvInd[0];
 	vMaxInd = dd_uvInd[1];
 	
@@ -286,7 +286,7 @@ __device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float 
 	}
 }
 
-__global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, float SO, float SD, float nu, float nv, float du, float dv, float nx, float ny, float nz){
+__global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, float SO, float SD, float nu, float nv, float du, float dv, float ui, float vi, float nx, float ny, float nz){
     int ix = 16 * blockIdx.x + threadIdx.x;
     int iy = 16 * blockIdx.y + threadIdx.y;
     int iz = 4 * blockIdx.z + threadIdx.z;
@@ -294,7 +294,7 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
         return;
     int id = ix + iy * nx + iz * nx * ny;
     img[id] = 0.0f;
-    kernel_kernel(&img[id], tex_proj, angle, SO, SD, nu, nv, du, dv, nx, ny, nz, ix, iy ,iz);
+    kernel_kernel(&img[id], tex_proj, angle, SO, SD, nu, nv, du, dv, ui, vi, nx, ny, nz, ix, iy ,iz);
     // world coordinates for this voxel
 	
 }
@@ -333,7 +333,7 @@ __host__ void kernel_backprojection(float *img, float *proj, float angle, float 
 
     const dim3 gridSize_singleProj((nx + 16 - 1) / 16, (ny + 16 - 1) / 16, (nz + 3) / 4);
     const dim3 blockSize(16, 16, 4);
-    kernel<<<gridSize_singleProj, blockSize>>>(img, tex_proj, angle, SO, SD, nb, na, da, db, nx, ny, nz);
+    kernel<<<gridSize_singleProj, blockSize>>>(img, tex_proj, angle, SO, SD, nb, na, db, da, bi, ai, nx, ny, nz);
     cudaDeviceSynchronize();
 
     cudaFreeArray(array_proj);
