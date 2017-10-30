@@ -1,0 +1,1 @@
+__global__ void kernel_initial(float *img, int nx, int ny, int nz, float value);
