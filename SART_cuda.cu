@@ -451,10 +451,10 @@ cudaCreateTextureObject(&tex_beta_z, &resDesc, &texDesc, NULL);
 
 // malloc in device: projection of the whole bin
 float *d_proj;
-cudaMalloc((void**)&d_proj, numBytesProj);
+cudaMalloc((void**)&d_proj, numBytesSingleProj);
 
 // copy to device: projection of the whole bin
-cudaMemcpy(d_proj, h_proj, numBytesProj, cudaMemcpyHostToDevice);
+// cudaMemcpy(d_proj, h_proj, numBytesProj, cudaMemcpyHostToDevice);
 
 // malloc in device: another projection pointer, with single view size
 float *d_singleViewProj2;
@@ -692,7 +692,8 @@ for (int ibin = 0; ibin < n_bin; ibin++){
 
             // difference between true projection and projection from initial guess
             // update d_singleViewProj2 instead of malloc a new one
-            kernel_add<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_proj, i_view, na, nb, -1);
+            cudaMemcpy(d_proj, h_proj + i_view * numSingleProj, numBytesSingleProj, cudaMemcpyHostToDevice);
+            kernel_add<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_proj, 0, na, nb, -1);
             cudaDeviceSynchronize();
             // mexPrintf("6");mexEvalString("drawnow;");
 
