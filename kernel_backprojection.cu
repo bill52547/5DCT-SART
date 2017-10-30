@@ -232,8 +232,8 @@ __device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float 
 	for (iU = MAX(0,uMinInd); iU <= MIN(uMaxInd, ((int)nu-1)); iU++){
 
 
-		vBound1 = ((float)iV - 0.5f - (nv/2) + 0.5f) * dv;
-		vBound2 = ((float)iV + 0.5f - (nv/2) + 0.5f) * dv;
+		vBound1 = ((float)iV - 0.5f + vi) * dv;
+		vBound2 = ((float)iV + 0.5f + vi) * dv;
 
 		// v weight
 		wv = 0;
@@ -253,8 +253,8 @@ __device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float 
 			wv = 1;
 			}
 
-		uBound1 = (iU - 0.5f - (nu/2) + 0.5f) * du;
-		uBound2 = (iU + 0.5f - (nu/2) + 0.5f) * du;
+		uBound1 = (iU - 0.5f + ui) * du;
+		uBound2 = (iU + 0.5f + ui) * du;
 
 		// u weight
 		wu = 0;

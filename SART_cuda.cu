@@ -704,7 +704,7 @@ for (int ibin = 0; ibin < n_bin; ibin++){
             // mexPrintf("7");mexEvalString("drawnow;");
 
             // copy img to pitched pointer and bind it to a texture object
-           dp_img = make_cudaPitchedPtr((void*) d_singleViewImg1, nx * sizeof(float), nx, ny);
+            dp_img = make_cudaPitchedPtr((void*) d_singleViewImg1, nx * sizeof(float), nx, ny);
             copyParams.srcPtr = dp_img;
             copyParams.dstArray = array_img;
             cudaStat = cudaMemcpy3D(&copyParams);   
