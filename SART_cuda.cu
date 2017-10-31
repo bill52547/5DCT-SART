@@ -736,7 +736,7 @@ for (int ibin = 0; ibin < n_bin; ibin++){
             // kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
             // cudaDeviceSynchronize();
             kernel_backprojection(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
-
+            
             // mexPrintf("11");mexEvalString("drawnow;");
 
             // weighting

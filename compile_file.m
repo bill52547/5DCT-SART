@@ -1,6 +1,6 @@
 close all;clc
 
-% !nvcc -shared -c -Xcompiler -fPIC kernel_backprojection.cu -I/usr/local/MATLAB/R2017b/extern/include 
+!nvcc -shared -c -Xcompiler -fPIC kernel_backprojection.cu -I/usr/local/MATLAB/R2017b/extern/include 
     
 if 0
     !nvcc -shared -c -Xcompiler -fPIC kernel_add.cu -I/usr/local/MATLAB/R2017b/extern/include 
@@ -23,6 +23,10 @@ if 0
     mexcuda generateProj_mex.cu kernel_deformation.o kernel_projection.o kernel_forwardDVF.o kernel_invertDVF.o
 end
 
-if 1
+if 0
     mexcuda host_projection.cu kernel_projection.o
+end
+
+if 01
+    mexcuda host_backprojection.cu kernel_backprojection.o
 end

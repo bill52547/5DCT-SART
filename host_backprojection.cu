@@ -1,11 +1,11 @@
-#include "host_projection.h" // consists all required package and functions
+#include "host_backprojection.h" // consists all required package and functions
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
 {
 // Macro for input and output
-#define IN_IMG prhs[0]
+#define IN_PROJ prhs[0]
 #define GEO_PARA prhs[1]
-#define OUT_PROJ plhs[0]
+#define OUT_IMG plhs[0]
 
 int nx, ny, nz, na, nb, numImg, numBytesImg, numSingleProj, numBytesSingleProj;
 float da, db, ai, bi, SO, SD, angle;
@@ -67,7 +67,7 @@ else{
 
 // detector plane offset from centered calibrations
 if (mxGetField(GEO_PARA, 0, "ai") != NULL){
-    ai = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "ai"));
+    ai = -(float)mxGetScalar(mxGetField(GEO_PARA, 0, "ai"));
     ai -= (float)na / 2 - 0.5f;
 }
 else{
@@ -109,29 +109,28 @@ else
 
 float *d_img, *d_proj;
 cudaMalloc((void**)&d_img, nx * ny * nz * sizeof(float));
-
-float *h_img;
-h_img = (float*)mxGetData(IN_IMG);
-cudaMemcpy(d_img, h_img, nx * ny * nz * sizeof(float), cudaMemcpyHostToDevice);
-
 cudaMalloc((void**)&d_proj, na * nb * sizeof(float));
-const dim3 gridSize_singleProj((nb + BLOCKWIDTH - 1) / BLOCKWIDTH, (na + BLOCKHEIGHT - 1) / BLOCKHEIGHT, 1);
-const dim3 blockSize(BLOCKWIDTH,BLOCKHEIGHT, BLOCKDEPTH);
 
-kernel_projection<<<gridSize_singleProj, blockSize>>>(d_proj, d_img, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
+float *h_proj;
+h_proj = (float*)mxGetData(IN_PROJ);
+
+cudaMemcpy(d_proj, h_proj, na * nb * sizeof(float), cudaMemcpyHostToDevice);
+
+
+
+kernel_backprojection(d_img, d_proj, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
 cudaDeviceSynchronize();
 
-OUT_PROJ = mxCreateNumericMatrix(0, 0, mxSINGLE_CLASS, mxREAL);
-const mwSize outDim[2] = {(mwSize)nb, (mwSize)na};
+OUT_IMG = mxCreateNumericMatrix(0, 0, mxSINGLE_CLASS, mxREAL);
+const mwSize outDim[3] = {(mwSize)nx, (mwSize)ny, (mwSize)nz};
 
-mxSetDimensions(OUT_PROJ, outDim, 2);
-mxSetData(OUT_PROJ, mxMalloc(na * nb * sizeof(float)));
-float *h_outproj = (float*)mxGetData(OUT_PROJ);
+mxSetDimensions(OUT_IMG, outDim, 3);
+mxSetData(OUT_IMG, mxMalloc(nx * ny * nz * sizeof(float)));
+float *h_outimg = (float*)mxGetData(OUT_IMG);
 
-cudaMemcpy(h_outproj, d_proj, numBytesSingleProj, cudaMemcpyDeviceToHost);
+cudaMemcpy(h_outimg, d_img, nx * ny * nz * sizeof(float), cudaMemcpyDeviceToHost);
 
 cudaFree(d_proj);
-
 cudaFree(d_img);
 cudaDeviceReset();
 return;

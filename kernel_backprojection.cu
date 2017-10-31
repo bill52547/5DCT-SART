@@ -1,6 +1,8 @@
 // past distance driven
 #include <math.h>
-
+#define BLOCKWIDTH 16
+#define BLOCKHEIGHT 16 
+#define BLOCKDEPTH 4
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #define ABS(x) ((x) > 0 ? (x) : -(x))
@@ -101,7 +103,7 @@ __device__ void get_uv_ranges(float* uMin, float* uMax, float* vMin, float* vMax
 	*vMax = MAX(tmp, iv4);
 }
 
-__device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float angle, float SO, float SD, float nu, float nv, float du, float dv, float ui, float vi, float nx, float ny, float nz, int ix, int iy, int iz)
+__device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float angle, float SO, float SD, int nu, int nv, float du, float dv, float ui, float vi, int nx, int ny, int nz, int ix, int iy, int iz)
 {
     value[0] = 0.0f;
     float dd_voxel[3];
@@ -286,10 +288,10 @@ __device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float 
 	}
 }
 
-__global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, float SO, float SD, float nu, float nv, float du, float dv, float ui, float vi, float nx, float ny, float nz){
-    int ix = 16 * blockIdx.x + threadIdx.x;
-    int iy = 16 * blockIdx.y + threadIdx.y;
-    int iz = 4 * blockIdx.z + threadIdx.z;
+__global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, float SO, float SD, int nu, int nv, float du, float dv, float ui, float vi, int nx, int ny, int nz){
+    int ix = BLOCKWIDTH * blockIdx.x + threadIdx.x;
+    int iy = BLOCKHEIGHT * blockIdx.y + threadIdx.y;
+    int iz = BLOCKDEPTH * blockIdx.z + threadIdx.z;
     if (ix >= nx || iy >= ny || iz >= nz)
         return;
     int id = ix + iy * nx + iz * nx * ny;
@@ -331,9 +333,9 @@ __host__ void kernel_backprojection(float *img, float *proj, float angle, float 
     cudaTextureObject_t tex_proj = 0;
     cudaCreateTextureObject(&tex_proj, &resDesc, &texDesc, NULL);
 
-    const dim3 gridSize_singleProj((nx + 16 - 1) / 16, (ny + 16 - 1) / 16, (nz + 3) / 4);
-    const dim3 blockSize(16, 16, 4);
-    kernel<<<gridSize_singleProj, blockSize>>>(img, tex_proj, angle, SO, SD, nb, na, db, da, bi, ai, nx, ny, nz);
+	const dim3 gridSize_Img((nx + BLOCKWIDTH - 1) / BLOCKWIDTH, (ny + BLOCKHEIGHT - 1) / BLOCKHEIGHT, (nz + BLOCKDEPTH - 1) / BLOCKDEPTH);
+	const dim3 blockSize(BLOCKWIDTH,BLOCKHEIGHT, BLOCKDEPTH);
+    kernel<<<gridSize_Img, blockSize>>>(img, tex_proj, angle, SO, SD, nb, na, db, da, bi, ai, nx, ny, nz);
     cudaDeviceSynchronize();
 
     cudaFreeArray(array_proj);
