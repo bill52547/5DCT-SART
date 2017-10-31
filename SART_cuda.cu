@@ -79,7 +79,6 @@ else{
 // detector plane offset from centered calibrations
 if (mxGetField(GEO_PARA, 0, "ai") != NULL){
     ai = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "ai"));
-    if (ai > -1)
         ai -= (float)na / 2 - 0.5f;
 }
 else{
@@ -90,7 +89,6 @@ else{
 
 if (mxGetField(GEO_PARA, 0, "bi") != NULL){
     bi = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "bi"));
-    if (bi > -1)
         bi -= (float)nb / 2 - 0.5f;
 }
 else{
@@ -693,6 +691,7 @@ for (int ibin = 0; ibin < n_bin; ibin++){
             // difference between true projection and projection from initial guess
             // update d_singleViewProj2 instead of malloc a new one
             cudaMemcpy(d_proj, h_proj + i_view * numSingleProj, numBytesSingleProj, cudaMemcpyHostToDevice);
+
             kernel_add<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_proj, 0, na, nb, -1);
             cudaDeviceSynchronize();
             // mexPrintf("6");mexEvalString("drawnow;");
@@ -704,7 +703,7 @@ for (int ibin = 0; ibin < n_bin; ibin++){
             // mexPrintf("7");mexEvalString("drawnow;");
 
             // copy img to pitched pointer and bind it to a texture object
-            dp_img = make_cudaPitchedPtr((void*) d_singleViewImg1, nx * sizeof(float), nx, ny);
+           dp_img = make_cudaPitchedPtr((void*) d_singleViewImg1, nx * sizeof(float), nx, ny);
             copyParams.srcPtr = dp_img;
             copyParams.dstArray = array_img;
             cudaStat = cudaMemcpy3D(&copyParams);   
@@ -736,7 +735,7 @@ for (int ibin = 0; ibin < n_bin; ibin++){
             // kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
             // cudaDeviceSynchronize();
             kernel_backprojection(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
-            
+
             // mexPrintf("11");mexEvalString("drawnow;");
 
             // weighting

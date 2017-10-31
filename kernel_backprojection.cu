@@ -1,22 +1,52 @@
-// past distance driven
-#include <math.h>
-#define BLOCKWIDTH 16
-#define BLOCKHEIGHT 16 
-#define BLOCKDEPTH 4
-#define MAX(a,b) (((a) > (b)) ? (a) : (b))
-#define MIN(a,b) (((a) < (b)) ? (a) : (b))
-#define ABS(x) ((x) > 0 ? (x) : -(x))
-#define PI 3.141592653589793f
-// #include "dist_cuda_functions.h"
+#include "kernel_backprojection.h"
 
-__device__ void get_uv_ind_flat(int* uvInd, float u, float v, float du, float dv, float nu, float nv, float ui, float vi){
+__host__ void kernel_backprojection(float *d_img, float *d_proj, float angle,float SO, float SD, float da, int na, float ai, float db, int nb, float bi, int nx, int ny, int nz)
+{
+    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
+    struct cudaExtent extent = make_cudaExtent(nb, na, 1);
+    cudaArray *array_proj;
+    cudaMalloc3DArray(&array_proj, &channelDesc, extent);
+    cudaMemcpy3DParms copyParams = {0};
+    cudaPitchedPtr dp_proj = make_cudaPitchedPtr((void*) d_proj, nb * sizeof(float), nb, na);
+    copyParams.extent = extent;
+    copyParams.kind = cudaMemcpyDeviceToDevice;
+    copyParams.srcPtr = dp_proj;
+    copyParams.dstArray = array_proj;
+    cudaMemcpy3D(&copyParams);
 
-	// get index of detector element
-	uvInd[0] = (int) floorf((u / du) - ui - 0.5f);
-	uvInd[1] = (int) floorf((v / dv) - vi - 0.5f);
+    cudaResourceDesc resDesc;
+    cudaTextureDesc texDesc;
+    memset(&resDesc, 0, sizeof(resDesc));
+    resDesc.resType = cudaResourceTypeArray;
 
-	//uvInd[0] = floorf((u / dv) + (nv/2) + 0.0f);
-	//uvInd[1] = floorf((v / du) + (nu/2) + 0.0f);
+    memset(&texDesc, 0, sizeof(texDesc));
+    texDesc.addressMode[0] = cudaAddressModeBorder;
+    texDesc.addressMode[1] = cudaAddressModeBorder;
+    texDesc.addressMode[2] = cudaAddressModeBorder;
+    texDesc.filterMode = cudaFilterModeLinear;
+    texDesc.readMode = cudaReadModeElementType;
+    texDesc.normalizedCoords = 0;
+    resDesc.res.array.array = array_proj;
+	cudaTextureObject_t tex_proj = 0;
+    // cudaTextureObject_t tex_proj = host_create_texture_object(d_proj, nb, na, 1);
+    cudaCreateTextureObject(&tex_proj, &resDesc, &texDesc, NULL);
+
+    const dim3 gridSize_singleProj((nx + BLOCKWIDTH - 1) / BLOCKWIDTH, (ny + BLOCKHEIGHT - 1) / BLOCKHEIGHT, (nz + BLOCKDEPTH - 1) / BLOCKDEPTH);
+    const dim3 blockSize(BLOCKWIDTH, BLOCKHEIGHT, BLOCKDEPTH);
+    kernel<<<gridSize_singleProj, blockSize>>>(d_img, tex_proj, angle, SO, SD, nb, na, db, da, bi, ai, nx, ny, nz);
+    cudaDeviceSynchronize();
+
+    cudaFreeArray(array_proj);
+    cudaDestroyTextureObject(tex_proj);
+}
+
+
+__device__ void get_uv_ind_flat(int* uvInd, float u, float v, float du, float dv, int nu, int nv, float ui, float vi){
+
+	// uvInd[0] = (int) floorf((u / du) + (nu/2) + 0.0f);
+	// uvInd[1] = (int) floorf((v / dv) + (nv/2) + 0.0f);
+	uvInd[0] = (int) floorf((u / du) - ui + 0.5f);
+	uvInd[1] = (int) floorf((v / dv) - vi + 0.5f);
 }
 // Find intersection of a line with detector plane
 __device__ void get_intersection_line_plane(float* intersection, float* p1, float* p2, float* x0, float* n){
@@ -103,15 +133,39 @@ __device__ void get_uv_ranges(float* uMin, float* uMax, float* vMin, float* vMax
 	*vMax = MAX(tmp, iv4);
 }
 
-__device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float angle, float SO, float SD, int nu, int nv, float du, float dv, float ui, float vi, int nx, int ny, int nz, int ix, int iy, int iz)
-{
-    value[0] = 0.0f;
-    float dd_voxel[3];
-	dd_voxel[0] = (float)ix - (nx/2) + 0.5f;
-	dd_voxel[1] = (float)iy - (ny/2) + 0.5f;
-	dd_voxel[2] = (float)iz - (nz/2) + 0.5f;
+__global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, float SO, float SD, int nu, int nv, float du, float dv, float ui, float vi, int nx, int ny, int nz){
+    int ix = BLOCKWIDTH * blockIdx.x + threadIdx.x;
+    int iy = BLOCKHEIGHT * blockIdx.y + threadIdx.y;
+    int iz = BLOCKDEPTH * blockIdx.z + threadIdx.z;
+    if (ix >= nx || iy >= ny || iz >= nz)
+        return;
+
+    int id = ix + iy * nx + iz * nx * ny;
+    img[id] = 0.0f;
+	float sphi = __sinf(angle);
+	float cphi = __cosf(angle);
+	// float dd_voxel[3];
+	float xc, yc, zc;
+	xc = (float)ix - nx / 2 + 0.5f;
+	yc = (float)iy - ny / 2 + 0.5f;
+	zc = (float)iz - nz / 2 + 0.5f;
+	// xc = (float)ix - (nx/2) + 0.5f;
+	// yc = (float)iy - (ny/2) + 0.5f;
+	// zc = (float)iz - (nz/2) + 0.5f;
 
 	// voxel boundary coordinates
+	float xl, yl, zl, xr, yr, zr, xt, yt, zt, xb, yb, zb;
+	xl = xc * cphi + yc * sphi - 0.5f;
+    yl = -xc * sphi + yc * cphi - 0.5f;
+    xr = xc * cphi + yc * sphi + 0.5f;
+    yr = -xc * sphi + yc * cphi + 0.5f;
+    zl = zc; zr = zc;
+    xt = xc * cphi + yc * sphi;
+    yt = -xc * sphi + yc * cphi;
+    zt = zc + 0.5f;
+    xb = xc * cphi + yc * sphi;
+    yb = -xc * sphi + yc * cphi;
+    zb = zc - 0.5f;
 	float a1[3];
 	float a2[3];
 	float z1[3];
@@ -150,11 +204,10 @@ __device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float 
 	int iV, iU;
 
 	// Rotate to phi = 0
-	float sphi = 0.0f;
-	float cphi = 1.0f;
-	float* dd_cos = &cphi;
-	float* dd_sin = &sphi;
-    __sincosf(angle, dd_sin, dd_cos); 
+
+	// float* dd_cos = &cphi;
+	// float* dd_sin = &sphi;
+    // __sincosf(angle, dd_sin, dd_cos); 
 	dd_centralDetectorPosition_rotated[0] = (SD - SO) * - 1;
 	dd_centralDetectorPosition_rotated[1] = 0;
 	dd_centralDetectorPosition_rotated[2] = 0;
@@ -182,30 +235,30 @@ __device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float 
 
 	// get rotated coordinates of voxel edges:
 	//left
-	a1[0] = dd_voxel[0] * cphi + dd_voxel[1] * sphi;
-	a1[1] = dd_voxel[0] * -1 * sphi + dd_voxel[1] * cphi;
-	a1[2] = dd_voxel[2];
+	a1[0] = xc * cphi + yc * sphi;
+	a1[1] = xc * -1 * sphi + yc * cphi;
+	a1[2] = zc;
 
 	a1[1] = a1[1] - 0.5f;
 	a1[0] = a1[0] - 0.5f;
 
 	// right
-	a2[0] = dd_voxel[0] * cphi + dd_voxel[1] * sphi;
-	a2[1] = dd_voxel[0] * -1 * sphi + dd_voxel[1] * cphi;
-	a2[2] = dd_voxel[2];
+	a2[0] = xc * cphi + yc * sphi;
+	a2[1] = xc * -1 * sphi + yc * cphi;
+	a2[2] = zc;
 
 	a2[1] = a2[1] + 0.5f;
 	a2[0] = a2[0] + 0.5f;
 
 	//lower
-	z1[0] = (dd_voxel[0] * cphi) + (dd_voxel[1] * sphi);
-	z1[1] = -1 * (dd_voxel[0] * sphi) + (dd_voxel[1] * cphi);
-	z1[2] = dd_voxel[2] - 0.5f;
+	z1[0] = (xc * cphi) + (yc * sphi);
+	z1[1] = -1 * (xc * sphi) + (yc * cphi);
+	z1[2] = zc - 0.5f;
 
 	//upper
-	z2[0] = (dd_voxel[0] * cphi) + (dd_voxel[1] * sphi);
-	z2[1] = -1 * (dd_voxel[0] * sphi) + (dd_voxel[1] * cphi);
-	z2[2] = dd_voxel[2] + 0.5f;
+	z2[0] = (xc * cphi) + (yc * sphi);
+	z2[1] = -1 * (xc * sphi) + (yc * cphi);
+	z2[2] = zc + 0.5f;
 
       // get intersection of ray from source through voxel edges and detector plane to find shadow region of this voxel
 	get_uv_ranges(&uMin, &uMax, &vMin, &vMax, dd_uv, dd_intersection, a1, a2, z1, z2, dd_sourcePosition_rotated, dd_centralDetectorPosition_rotated, u1_rotated, v1_rotated,dd_helical_detector_vector);
@@ -231,115 +284,62 @@ __device__ void kernel_kernel(float* value, cudaTextureObject_t tex_proj, float 
 	
 	// loop over detectors in the shadow region of this voxel
 	for (iV = MAX(0,vMinInd); iV <= MIN(vMaxInd, ((int)nv-1)); iV++){
-	for (iU = MAX(0,uMinInd); iU <= MIN(uMaxInd, ((int)nu-1)); iU++){
+		for (iU = MAX(0,uMinInd); iU <= MIN(uMaxInd, ((int)nu-1)); iU++){
 
 
-		vBound1 = ((float)iV - 0.5f + vi) * dv;
-		vBound2 = ((float)iV + 0.5f + vi) * dv;
+			// vBound1 = ((float)iV - 0.5f - (nv/2) + 0.5f) * dv;
+			// vBound2 = ((float)iV + 0.5f - (nv/2) + 0.5f) * dv;
+			vBound1 = ((float)iV - 0.5f + vi) * dv;	
+			vBound2 = ((float)iV + 0.5f + vi) * dv;
+			// v weight
+			wv = 0;
+				if ( (vBound1 < vMin) && (vMax >= vBound2) ){
+				wv = (vBound2 - vMin) / dv;
+				}
 
-		// v weight
-		wv = 0;
-			if ( (vBound1 < vMin) && (vMax >= vBound2) ){
-			wv = (vBound2 - vMin) / dv;
-			}
+				else if ( (vBound1 < vMin) && (vMax < vBound2) ){
+				wv = (vMax - vMin) / dv;
+				}
 
-			else if ( (vBound1 < vMin) && (vMax < vBound2) ){
-			wv = (vMax - vMin) / dv;
-			}
+				else if ( (vBound2 > vMax) && (vMin <= vBound1) ) {
+				wv = (vMax - vBound1) / dv;
+				}
 
-			else if ( (vBound2 > vMax) && (vMin <= vBound1) ) {
-			wv = (vMax - vBound1) / dv;
-			}
+				else{
+				wv = 1;
+				}
 
-			else{
-			wv = 1;
-			}
+			// uBound1 = (iU - 0.5f - (nu/2) + 0.5f) * du;
+			// uBound2 = (iU + 0.5f - (nu/2) + 0.5f) * du;
+			uBound1 = (iU - 0.5f + ui) * du;
+			uBound2 = (iU + 0.5f + ui) * du;			
 
-		uBound1 = (iU - 0.5f + ui) * du;
-		uBound2 = (iU + 0.5f + ui) * du;
+			// u weight
+			wu = 0;
 
-		// u weight
-		wu = 0;
+				if ( (uBound1 < uMin) && (uMax > uBound2) ){
+				wu = (uBound2 - uMin) / du;
+				}
 
-			if ( (uBound1 < uMin) && (uMax > uBound2) ){
-			wu = (uBound2 - uMin) / du;
-			}
+				else if ( (uBound1 < uMin) && (uMax <= uBound2) ){
 
-			else if ( (uBound1 < uMin) && (uMax <= uBound2) ){
+				//wu = 1;
+				wu = (uMax - uMin) / du;
+				}
 
-			//wu = 1;
-			wu = (uMax - uMin) / du;
-			}
+				else if ( (uBound2 > uMax) && (uMin <= uBound1) ) {
+				wu = (uMax - uBound1) / du;
+				}
 
-			else if ( (uBound2 > uMax) && (uMin <= uBound1) ) {
-			wu = (uMax - uBound1) / du;
-			}
+				else{
+				wu = 1;
+				}
 
-			else{
-			wu = 1;
-			}
+			w = wu * wv;
 
-		w = wu * wv;
+			img[id] += w * tex3D<float>(tex_proj,(iU + 0.5f), (iV + 0.5f), 0.5f);
 
-		value[0] += w * tex3D<float>(tex_proj,(iU + 0.5f), (iV + 0.5f), 0.5f);
-
-// end loop over detectors
+		}
 	}
-	}
-}
-
-__global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, float SO, float SD, int nu, int nv, float du, float dv, float ui, float vi, int nx, int ny, int nz){
-    int ix = BLOCKWIDTH * blockIdx.x + threadIdx.x;
-    int iy = BLOCKHEIGHT * blockIdx.y + threadIdx.y;
-    int iz = BLOCKDEPTH * blockIdx.z + threadIdx.z;
-    if (ix >= nx || iy >= ny || iz >= nz)
-        return;
-    int id = ix + iy * nx + iz * nx * ny;
-    img[id] = 0.0f;
-    kernel_kernel(&img[id], tex_proj, angle, SO, SD, nu, nv, du, dv, ui, vi, nx, ny, nz, ix, iy ,iz);
-    // world coordinates for this voxel
-	
-}
-
-
-__host__ void kernel_backprojection(float *img, float *proj, float angle, float SO, float SD, float da, int na, float ai, float db, int nb, float bi, int nx, int ny, int nz)
-{
-    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
-    struct cudaExtent extent = make_cudaExtent(nb, na, 1);
-    cudaArray *array_proj;
-    cudaMalloc3DArray(&array_proj, &channelDesc, extent);
-    cudaMemcpy3DParms copyParams = {0};
-    cudaPitchedPtr dp_proj = make_cudaPitchedPtr((void*) proj, nb * sizeof(float), nb, na);
-    copyParams.extent = extent;
-    copyParams.kind = cudaMemcpyDeviceToDevice;
-    copyParams.srcPtr = dp_proj;
-    copyParams.dstArray = array_proj;
-    cudaMemcpy3D(&copyParams);
-
-
-    cudaResourceDesc resDesc;
-    cudaTextureDesc texDesc;
-    memset(&resDesc, 0, sizeof(resDesc));
-    resDesc.resType = cudaResourceTypeArray;
-
-    memset(&texDesc, 0, sizeof(texDesc));
-    texDesc.addressMode[0] = cudaAddressModeBorder;
-    texDesc.addressMode[1] = cudaAddressModeBorder;
-    texDesc.addressMode[2] = cudaAddressModeBorder;
-    texDesc.filterMode = cudaFilterModeLinear;
-    texDesc.readMode = cudaReadModeElementType;
-    texDesc.normalizedCoords = 0;
-    resDesc.res.array.array = array_proj;
-    cudaTextureObject_t tex_proj = 0;
-    cudaCreateTextureObject(&tex_proj, &resDesc, &texDesc, NULL);
-
-	const dim3 gridSize_Img((nx + BLOCKWIDTH - 1) / BLOCKWIDTH, (ny + BLOCKHEIGHT - 1) / BLOCKHEIGHT, (nz + BLOCKDEPTH - 1) / BLOCKDEPTH);
-	const dim3 blockSize(BLOCKWIDTH,BLOCKHEIGHT, BLOCKDEPTH);
-    kernel<<<gridSize_Img, blockSize>>>(img, tex_proj, angle, SO, SD, nb, na, db, da, bi, ai, nx, ny, nz);
-    cudaDeviceSynchronize();
-
-    cudaFreeArray(array_proj);
-    cudaDestroyTextureObject(tex_proj);
-
 }
 
