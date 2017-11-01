@@ -12,4 +12,7 @@ __global__ void kernel_division(float *img1, float *img, int nx, int ny, int nz)
         img1[id] = 0;
     else
         img1[id] /= img[id];
+
+    //if (img1[id] < 0)
+    //    img1[id] = 0;
 }

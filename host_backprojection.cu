@@ -67,8 +67,8 @@ else{
 
 // detector plane offset from centered calibrations
 if (mxGetField(GEO_PARA, 0, "ai") != NULL){
-    ai = -(float)mxGetScalar(mxGetField(GEO_PARA, 0, "ai"));
-    ai -= (float)na / 2 - 0.5f;
+    ai = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "ai"));
+    ai -= ((float)na / 2 - 0.5f);
 }
 else{
     mexPrintf("Automatically set detector offset ai to 0. \n");
@@ -78,8 +78,8 @@ else{
 
 if (mxGetField(GEO_PARA, 0, "bi") != NULL){
     bi = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "bi"));
-    if (bi > -1)
-        bi -= (float)nb / 2 - 0.5f;
+    // if (bi > -1)
+    bi -= ((float)nb / 2 - 0.5f);
 }
 else{
     mexPrintf("Automatically set detector offset bi to 0. \n");
