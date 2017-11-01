@@ -3,11 +3,11 @@
 __host__ void kernel_backprojection(float *d_img, float *d_proj, float angle,float SO, float SD, float da, int na, float ai, float db, int nb, float bi, int nx, int ny, int nz)
 {
     cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
-    struct cudaExtent extent = make_cudaExtent(nb, na, 1);
+    struct cudaExtent extent = make_cudaExtent(na, nb, 1);
     cudaArray *array_proj;
     cudaMalloc3DArray(&array_proj, &channelDesc, extent);
     cudaMemcpy3DParms copyParams = {0};
-    cudaPitchedPtr dp_proj = make_cudaPitchedPtr((void*) d_proj, nb * sizeof(float), nb, na);
+    cudaPitchedPtr dp_proj = make_cudaPitchedPtr((void*) d_proj, na * sizeof(float), na, nb);
     copyParams.extent = extent;
     copyParams.kind = cudaMemcpyDeviceToDevice;
     copyParams.srcPtr = dp_proj;
@@ -33,7 +33,16 @@ __host__ void kernel_backprojection(float *d_img, float *d_proj, float angle,flo
 
     const dim3 gridSize_singleProj((nx + BLOCKWIDTH - 1) / BLOCKWIDTH, (ny + BLOCKHEIGHT - 1) / BLOCKHEIGHT, (nz + BLOCKDEPTH - 1) / BLOCKDEPTH);
     const dim3 blockSize(BLOCKWIDTH, BLOCKHEIGHT, BLOCKDEPTH);
-    kernel<<<gridSize_singleProj, blockSize>>>(d_img, tex_proj, angle, SO, SD, nb, na, db, da, bi, ai, nx, ny, nz);
+	// mexPrintf("angle = %f.\n", angle);
+	// mexPrintf("SO = %f.\n", SO);
+	// mexPrintf("SD = %f.\n", SD);
+	// mexPrintf("na = %d.\n", na);
+	// mexPrintf("nb = %d.\n", nb);
+	// mexPrintf("da = %f.\n", da);
+	// mexPrintf("db = %f.\n", db);
+	// mexPrintf("ai = %f.\n", ai);
+	// mexPrintf("bi = %f.\n", bi);
+    kernel<<<gridSize_singleProj, blockSize>>>(d_img, tex_proj, angle, SO, SD, na, nb, da, db, ai, bi, nx, ny, nz);
     cudaDeviceSynchronize();
 
     cudaFreeArray(array_proj);
@@ -48,8 +57,8 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
     if (ix >= nx || iy >= ny || iz >= nz)
         return;
 
-    int id = ix + iy * nx + iz * nx * ny;
-	angle += 3.141592653589793;
+    int id = (nx - 1 - ix) + iy * nx + iz * nx * ny;
+	// angle += 3.141592653589793;
 
     img[id] = 0.0f;
 	float sphi = __sinf(angle);
@@ -90,30 +99,39 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
 	ratio = x21 / (xb - x1);
 	ab = ratio * yb;
 	bb = ratio * zb;
-	a_max = MAX4(al ,ar, at, ab); // coordinating positions of projection points on detector plane.
+	a_max =  MAX4(al ,ar, at, ab); // coordinating positions of projection points on detector plane.
 	a_min = MIN4(al ,ar, at, ab);
 	b_max = MAX4(bl ,br, bt, bb);
 	b_min = MIN4(bl ,br, bt, bb);
-
 	a_max = a_max / da - ai; //  now they are the detector coordinates
 	a_min = a_min / da - ai;
 	b_max = b_max / db - bi;
 	b_min = b_min / db - bi;
+
 	int a_ind_max = (int)floorf(a_max);
-	int a_ind_min = (int)ceilf(a_min);
+	int a_ind_min = (int)floorf(a_min);
 	int b_ind_max = (int)floorf(b_max);
-	int b_ind_min = (int)ceilf(b_min);
+	int b_ind_min = (int)floorf(b_min);
 
 	float bin_bound_1, bin_bound_2, wa, wb;
 	for (int ia = MAX(0, a_ind_min); ia <= MIN(na - 1, a_ind_max); ia ++){
-		bin_bound_1 = ((float)ia + ai - 0.5f) * da;
-		bin_bound_2 = ((float)ia + ai + 0.5f) * da;
-		wa = MIN(bin_bound_2, a_max) - MIN(bin_bound_1, a_min);
+		// bin_bound_1 = ((float)ia + ai - 0.5f) * da;
+		// bin_bound_2 = ((float)ia + ai + 0.5f) * da;
+		bin_bound_1 = ia;
+		bin_bound_2 = ia + 1;
+		
+		wa = MIN(bin_bound_2, a_max) - MAX(bin_bound_1, a_min);// wa /= da;
+
 		for (int ib = MAX(0, b_ind_min); ib <= MIN(nb - 1, b_ind_max); ib ++){
-			bin_bound_1 = ((float)ib + bi - 0.5f) * db;
-			bin_bound_2 = ((float)ib + bi + 0.5f) * db;
-			wb = MIN(bin_bound_2, b_max) - MIN(bin_bound_1, b_min);
-			img[id] += wa * wb * tex3D<float>(tex_proj,(ib + 0.5f), (ia + 0.5f), 0.5f);
+			// bin_bound_1 = ((float)ib + bi - 0.5f) * db;
+			// bin_bound_2 = ((float)ib + bi + 0.5f) * db;
+			bin_bound_1 = ib;
+			bin_bound_2 = ib + 1;
+			wb = MIN(bin_bound_2, b_max) - MAX(bin_bound_1, b_min); // wb /= db;
+			// img[id] = tex3D<float>(tex_proj, (ib + 0.5f), (ia + 0.5f), 0.5f);
+			// return;		
+
+			img[id] += wa * wb * tex3D<float>(tex_proj, (ia + 0.5f), (ib + 0.5f), 0.5f);
 		}		
 	}
 }

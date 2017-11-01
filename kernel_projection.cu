@@ -3,11 +3,11 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 __global__ void kernel_projection(float *proj, float *img, float angle, float SO, float SD, float da, int na, float ai, float db, int nb, float bi, int nx, int ny, int nz){
-    int ib = 16 * blockIdx.x + threadIdx.x;
-    int ia = 16 * blockIdx.y + threadIdx.y;
+    int ia = 16 * blockIdx.x + threadIdx.x;
+    int ib = 16 * blockIdx.y + threadIdx.y;
     if (ia >= na || ib >= nb)
         return;
-    int id = ib + (na - 1 - ia) * nb;
+    int id = ia + ib * na;
     proj[id] = 0.0f;
     angle += 3.141592653589793;
     float x1, y1, z1, x2, y2, z2, x20, y20, cphi, sphi;

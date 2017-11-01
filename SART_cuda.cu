@@ -735,6 +735,7 @@ for (int ibin = 0; ibin < n_bin; ibin++){
             // kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
             // cudaDeviceSynchronize();
             kernel_backprojection(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
+            cudaDeviceSynchronize();
 
             // mexPrintf("11");mexEvalString("drawnow;");
 
@@ -756,7 +757,7 @@ for (int ibin = 0; ibin < n_bin; ibin++){
         cudaMemcpy(d_img1, d_img, numBytesImg, cudaMemcpyDeviceToDevice);
     }
     cudaMemcpy(h_outimg + ibin * numImg, d_img, numBytesImg, cudaMemcpyDeviceToHost);
-    
+    // h_outimg[0] = 0.1f;
     mexPrintf("\n");mexEvalString("drawnow;");
 }
 

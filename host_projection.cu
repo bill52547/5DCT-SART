@@ -115,14 +115,14 @@ h_img = (float*)mxGetData(IN_IMG);
 cudaMemcpy(d_img, h_img, nx * ny * nz * sizeof(float), cudaMemcpyHostToDevice);
 
 cudaMalloc((void**)&d_proj, na * nb * sizeof(float));
-const dim3 gridSize_singleProj((nb + BLOCKWIDTH - 1) / BLOCKWIDTH, (na + BLOCKHEIGHT - 1) / BLOCKHEIGHT, 1);
+const dim3 gridSize_singleProj((na + BLOCKWIDTH - 1) / BLOCKWIDTH, (nb + BLOCKHEIGHT - 1) / BLOCKHEIGHT, 1);
 const dim3 blockSize(BLOCKWIDTH,BLOCKHEIGHT, BLOCKDEPTH);
 
 kernel_projection<<<gridSize_singleProj, blockSize>>>(d_proj, d_img, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
 cudaDeviceSynchronize();
 
 OUT_PROJ = mxCreateNumericMatrix(0, 0, mxSINGLE_CLASS, mxREAL);
-const mwSize outDim[2] = {(mwSize)nb, (mwSize)na};
+const mwSize outDim[2] = {(mwSize)na, (mwSize)nb};
 
 mxSetDimensions(OUT_PROJ, outDim, 2);
 mxSetData(OUT_PROJ, mxMalloc(na * nb * sizeof(float)));
