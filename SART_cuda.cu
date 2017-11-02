@@ -79,22 +79,22 @@ else{
 // detector plane offset from centered calibrations
 if (mxGetField(GEO_PARA, 0, "ai") != NULL){
     ai = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "ai"));
-        ai -= (float)na / 2 - 0.5f;
+    ai -= ((float)na / 2 - 0.5f);
 }
 else{
     mexPrintf("Automatically set detector offset ai to 0. \n");
     mexPrintf("If don't want that default value, please set para.ai manually.\n");
-    ai = - (float)na / 2 + 0.5f;
+    ai = - ((float)na / 2 - 0.5f);
 }
 
 if (mxGetField(GEO_PARA, 0, "bi") != NULL){
     bi = (float)mxGetScalar(mxGetField(GEO_PARA, 0, "bi"));
-        bi -= (float)nb / 2 - 0.5f;
+    bi -= ((float)nb / 2 - 0.5f);
 }
 else{
     mexPrintf("Automatically set detector offset bi to 0. \n");
     mexPrintf("If don't want that default value, please set para.bi manually.\n");
-    bi = - (float)nb / 2 + 0.5f;
+    bi = - ((float)nb / 2 - 0.5f);
 }
 
 
@@ -227,12 +227,12 @@ h_proj = (float*)mxGetData(PROJ);
 
 // define thread distributions
 const dim3 gridSize_img((nx + BLOCKWIDTH - 1) / BLOCKWIDTH, (ny + BLOCKHEIGHT - 1) / BLOCKHEIGHT, (nz + BLOCKDEPTH - 1) / BLOCKDEPTH);
-const dim3 gridSize_singleProj((nb + BLOCKWIDTH - 1) / BLOCKWIDTH, (na + BLOCKHEIGHT - 1) / BLOCKHEIGHT, 1);
+const dim3 gridSize_singleProj((na + BLOCKWIDTH - 1) / BLOCKWIDTH, (nb + BLOCKHEIGHT - 1) / BLOCKHEIGHT, 1);
 const dim3 blockSize(BLOCKWIDTH,BLOCKHEIGHT, BLOCKDEPTH);
 
 // CUDA 3DArray Malloc parameters
 struct cudaExtent extent_img = make_cudaExtent(nx, ny, nz);
-struct cudaExtent extent_singleProj = make_cudaExtent(nb, na, 1);
+struct cudaExtent extent_singleProj = make_cudaExtent(na, nb, 1);
 
 //Allocate CUDA array in device memory of 5DCT matrices: alpha and beta
 cudaArray *d_alpha_x, *d_alpha_y, *d_alpha_z, *d_beta_x, *d_beta_y, *d_beta_z;
@@ -682,28 +682,25 @@ for (int ibin = 0; ibin < n_bin; ibin++){
             
             kernel_deformation<<<gridSize_img, blockSize>>>(d_singleViewImg1, tex_img, d_mx2, d_my2, d_mz2, nx, ny, nz);
             cudaDeviceSynchronize();
-            // mexPrintf("4");mexEvalString("drawnow;");
+
             // projection of deformed image from initial guess
             kernel_projection<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_singleViewImg1, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz); // TBD
             cudaDeviceSynchronize();
-            // mexPrintf("5");mexEvalString("drawnow;");
 
             // difference between true projection and projection from initial guess
             // update d_singleViewProj2 instead of malloc a new one
             cudaMemcpy(d_proj, h_proj + i_view * numSingleProj, numBytesSingleProj, cudaMemcpyHostToDevice);
+            // mexPrintf("i_view = %d.\n", i_view);mexEvalString("drawnow;");
 
             kernel_add<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_proj, 0, na, nb, -1);
             cudaDeviceSynchronize();
-            // mexPrintf("6");mexEvalString("drawnow;");
 
             // backprojecting the difference of projections
             // print parameters              
             kernel_backprojection(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
-            cudaDeviceSynchronize();
-            // mexPrintf("7");mexEvalString("drawnow;");
 
             // copy img to pitched pointer and bind it to a texture object
-           dp_img = make_cudaPitchedPtr((void*) d_singleViewImg1, nx * sizeof(float), nx, ny);
+            dp_img = make_cudaPitchedPtr((void*) d_singleViewImg1, nx * sizeof(float), nx, ny);
             copyParams.srcPtr = dp_img;
             copyParams.dstArray = array_img;
             cudaStat = cudaMemcpy3D(&copyParams);   
@@ -727,15 +724,14 @@ for (int ibin = 0; ibin < n_bin; ibin++){
             kernel_initial<<<gridSize_img, blockSize>>>(d_singleViewImg1, nx, ny, nz, 1);
             cudaDeviceSynchronize();
             // mexPrintf("9");mexEvalString("drawnow;");
-
             kernel_projection<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_singleViewImg1, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
             cudaDeviceSynchronize();
+
             // mexPrintf("10");mexEvalString("drawnow;");
 
             // kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
             // cudaDeviceSynchronize();
             kernel_backprojection(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
-            cudaDeviceSynchronize();
 
             // mexPrintf("11");mexEvalString("drawnow;");
 
@@ -748,7 +744,6 @@ for (int ibin = 0; ibin < n_bin; ibin++){
             kernel_update<<<gridSize_img, blockSize>>>(d_img, d_singleViewImg2, nx, ny, nz, lambda);
             cudaDeviceSynchronize();          
             // mexPrintf("13");mexEvalString("drawnow;");
-
         }
     }
     if (ibin == 0){

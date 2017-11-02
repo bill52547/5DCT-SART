@@ -9,7 +9,6 @@ __global__ void kernel_projection(float *proj, float *img, float angle, float SO
         return;
     int id = ia + ib * na;
     proj[id] = 0.0f;
-    angle += 3.141592653589793;
     float x1, y1, z1, x2, y2, z2, x20, y20, cphi, sphi;
     cphi = (float)cosf(angle);
     sphi = (float)sinf(angle);

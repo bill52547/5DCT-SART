@@ -57,7 +57,7 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
     if (ix >= nx || iy >= ny || iz >= nz)
         return;
 
-    int id = (nx - 1 - ix) + iy * nx + iz * nx * ny;
+    int id = ix + iy * nx + iz * nx * ny;
 	// angle += 3.141592653589793;
 
     img[id] = 0.0f;
