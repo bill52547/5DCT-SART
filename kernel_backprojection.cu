@@ -84,29 +84,34 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
     zb = zc - 0.5f;
 
 	// the coordinates of source and detector plane here are after rotation
-	float x1 = -SO, x21 = SD;
 	float ratio, al, bl, ar, br, at, bt, ab, bb, a_max, a_min, b_max, b_min;
 	// calculate a value for each boundary coordinates
-	ratio = x21 / (xl - x1);
+	
+	ratio = SD / (xl + SO);
 	al = ratio * yl;
 	bl = ratio * zl;
-	ratio = x21 / (xr - x1);
+	ratio = SD / (xr + SO);
 	ar = ratio * yr;
 	br = ratio * zr;
-	ratio = x21 / (xt - x1);
+	ratio = SD / (xt + SO);
 	at = ratio * yt;
 	bt = ratio * zt;
-	ratio = x21 / (xb - x1);
+	ratio = SD / (xb + SO);
 	ab = ratio * yb;
 	bb = ratio * zb;
-	a_max =  MAX4(al ,ar, at, ab); // coordinating positions of projection points on detector plane.
-	a_min = MIN4(al ,ar, at, ab);
-	b_max = MAX4(bl ,br, bt, bb);
-	b_min = MIN4(bl ,br, bt, bb);
-	a_max = a_max / da - ai; //  now they are the detector coordinates
-	a_min = a_min / da - ai;
-	b_max = b_max / db - bi;
-	b_min = b_min / db - bi;
+	// a_max = MAX4(al ,ar, at, ab); // coordinating positions of projection points on detector plane.
+	// a_min = MIN4(al ,ar, at, ab);
+	// b_max = MAX4(bl ,br, bt, bb);
+	// b_min = MIN4(bl ,br, bt, bb);
+	a_max = MAX(al, ar); a_max = MAX(a_max, at); a_max = MAX(a_max, ab);
+	b_max = MAX(bl, br); b_max = MAX(b_max, bt); b_max = MAX(b_max, bb);
+	a_min = MIN(al, ar); a_min = MIN(a_min, at); a_min = MIN(a_min, ab);
+	b_min = MIN(bl, br); b_min = MIN(b_min, bt); b_min = MIN(b_min, bb);
+
+	a_max = a_max / da - ai + 0.0f; //  now they are the detector coordinates
+	a_min = a_min / da - ai + 0.0f;
+	b_max = b_max / db - bi + 0.0f;
+	b_min = b_min / db - bi + 0.0f;
 
 	int a_ind_max = (int)floorf(a_max);
 	int a_ind_min = (int)floorf(a_min);
@@ -117,16 +122,16 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
 	for (int ia = MAX(0, a_ind_min); ia <= MIN(na - 1, a_ind_max); ia ++){
 		// bin_bound_1 = ((float)ia + ai - 0.5f) * da;
 		// bin_bound_2 = ((float)ia + ai + 0.5f) * da;
-		bin_bound_1 = ia;
-		bin_bound_2 = ia + 1;
+		bin_bound_1 = ia + 0.0f;
+		bin_bound_2 = ia + 1.0f;
 		
 		wa = MIN(bin_bound_2, a_max) - MAX(bin_bound_1, a_min);// wa /= da;
 
 		for (int ib = MAX(0, b_ind_min); ib <= MIN(nb - 1, b_ind_max); ib ++){
 			// bin_bound_1 = ((float)ib + bi - 0.5f) * db;
 			// bin_bound_2 = ((float)ib + bi + 0.5f) * db;
-			bin_bound_1 = ib;
-			bin_bound_2 = ib + 1;
+			bin_bound_1 = ib + 0.0f;
+			bin_bound_2 = ib + 1.0f;
 			wb = MIN(bin_bound_2, b_max) - MAX(bin_bound_1, b_min); // wb /= db;
 			// img[id] = tex3D<float>(tex_proj, (ib + 0.5f), (ia + 0.5f), 0.5f);
 			// return;		
