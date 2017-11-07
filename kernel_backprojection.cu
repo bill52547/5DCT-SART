@@ -31,7 +31,7 @@ __host__ void kernel_backprojection(float *d_img, float *d_proj, float angle,flo
     // cudaTextureObject_t tex_proj = host_create_texture_object(d_proj, nb, na, 1);
     cudaCreateTextureObject(&tex_proj, &resDesc, &texDesc, NULL);
 
-    const dim3 gridSize_singleProj((nx + BLOCKWIDTH - 1) / BLOCKWIDTH, (ny + BLOCKHEIGHT - 1) / BLOCKHEIGHT, (nz + BLOCKDEPTH - 1) / BLOCKDEPTH);
+    const dim3 gridSize_img((nx + BLOCKWIDTH - 1) / BLOCKWIDTH, (ny + BLOCKHEIGHT - 1) / BLOCKHEIGHT, (nz + BLOCKDEPTH - 1) / BLOCKDEPTH);
     const dim3 blockSize(BLOCKWIDTH, BLOCKHEIGHT, BLOCKDEPTH);
 	// mexPrintf("angle = %f.\n", angle);
 	// mexPrintf("SO = %f.\n", SO);
@@ -42,7 +42,7 @@ __host__ void kernel_backprojection(float *d_img, float *d_proj, float angle,flo
 	// mexPrintf("db = %f.\n", db);
 	// mexPrintf("ai = %f.\n", ai);
 	// mexPrintf("bi = %f.\n", bi);
-    kernel<<<gridSize_singleProj, blockSize>>>(d_img, tex_proj, angle, SO, SD, na, nb, da, db, ai, bi, nx, ny, nz);
+    kernel<<<gridSize_img, blockSize>>>(d_img, tex_proj, angle, SO, SD, na, nb, da, db, ai, bi, nx, ny, nz);
     cudaDeviceSynchronize();
 
     cudaFreeArray(array_proj);
