@@ -61,6 +61,8 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
 	// angle += 3.141592653589793;
 
     img[id] = 0.0f;
+	// float sphi = __sinf(angle);
+	// float cphi = __cosf(angle);
 	float sphi = __sinf(angle);
 	float cphi = __cosf(angle);
 	// float dd_voxel[3];
@@ -71,9 +73,9 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
 
 	// voxel boundary coordinates
 	float xl, yl, zl, xr, yr, zr, xt, yt, zt, xb, yb, zb;
-	xl = xc * cphi + yc * sphi - 0.5f;
+	xl = xc * cphi + yc * sphi;// - 0.5f;
     yl = -xc * sphi + yc * cphi - 0.5f;
-    xr = xc * cphi + yc * sphi + 0.5f;
+    xr = xc * cphi + yc * sphi;// + 0.5f;
     yr = -xc * sphi + yc * cphi + 0.5f;
     zl = zc; zr = zc;
     xt = xc * cphi + yc * sphi;
@@ -108,34 +110,36 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
 	b_max = MAX4(bl ,br, bt, bb);
 	b_min = MIN4(bl ,br, bt, bb);
 
-
 	// the related positions on detector plane from start points
-	// a_max = a_max / da - ai - 0.5f; //  now they are the detector coordinates
-	// a_min = a_min / da - ai - 0.5f;
-	// b_max = b_max / db - bi - 0.5f;
-	// b_min = b_min / db - bi - 0.5f;
-
-
-	int a_ind_max = (int)floorf(a_max / da - ai + 0.5f);
-	int a_ind_min = (int)floorf(a_min / da - ai + 0.5f);
-	int b_ind_max = (int)floorf(b_max / db - bi + 0.5f);
-	int b_ind_min = (int)floorf(b_min / db - bi + 0.5f);
+	a_max = a_max / da - ai + 0.5f; //  now they are the detector coordinates
+	a_min = a_min / da - ai + 0.5f;
+	b_max = b_max / db - bi + 0.5f;
+	b_min = b_min / db - bi + 0.5f;
+	int a_ind_max = (int)floorf(a_max); 	
+	int a_ind_min = (int)floorf(a_min); 
+	int b_ind_max = (int)floorf(b_max); 
+	int b_ind_min = (int)floorf(b_min); 
+	
+	// int a_ind_max = (int)floorf(a_max / da - ai);
+	// int a_ind_min = (int)floorf(a_min / da - ai);
+	// int b_ind_max = (int)floorf(b_max / db - bi);
+	// int b_ind_min = (int)floorf(b_min / db - bi);
 
 	float bin_bound_1, bin_bound_2, wa, wb;
-	for (int ia = MAX(0, a_ind_min); ia <= MIN(na - 1, a_ind_max); ia ++){
-		bin_bound_1 = ((float)ia + ai - 0.5f) * da;
-		bin_bound_2 = ((float)ia + ai + 0.5f) * da;
-		// bin_bound_1 = ia + 0.0f;
-		// bin_bound_2 = ia + 1.0f;
+	for (int ia = MAX(0, a_ind_min); ia <= MIN((na - 1), a_ind_max); ia ++){
+		// bin_bound_1 = ((float)ia + ai) * da;
+		// bin_bound_2 = ((float)ia + ai + 1.0f) * da;
+		bin_bound_1 = ia + 0.0f;
+		bin_bound_2 = ia + 1.0f;
 		
-		wa = MIN(bin_bound_2, a_max) - MAX(bin_bound_1, a_min); wa /= da;
+		wa = MIN(bin_bound_2, a_max) - MAX(bin_bound_1, a_min);// wa /= da;
 
-		for (int ib = MAX(0, b_ind_min); ib <= MIN(nb - 1, b_ind_max); ib ++){
-			bin_bound_1 = ((float)ib + bi - 0.5f) * db;
-			bin_bound_2 = ((float)ib + bi + 0.5f) * db;
-			// bin_bound_1 = ib + 0.0f;
-			// bin_bound_2 = ib + 1.0f;
-			wb = MIN(bin_bound_2, b_max) - MAX(bin_bound_1, b_min); wb /= db;
+		for (int ib = MAX(0, b_ind_min); ib <= MIN((nb - 1), b_ind_max); ib ++){
+			// bin_bound_1 = ((float)ib + bi) * db;
+			// bin_bound_2 = ((float)ib + bi + 1.0f) * db;
+			bin_bound_1 = ib + 0.0f;
+			bin_bound_2 = ib + 1.0f;
+			wb = MIN(bin_bound_2, b_max) - MAX(bin_bound_1, b_min);// wb /= db;
 			// img[id] = tex3D<float>(tex_proj, (ib + 0.5f), (ia + 0.5f), 0.5f);
 			// return;		
 
