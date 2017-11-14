@@ -462,7 +462,7 @@ cudaMalloc((void**)&d_singleViewProj2, numBytesSingleProj);
 // malloc in device: projection of the whole bin
 float *d_img ,*d_img1;
 cudaArray *array_img;
-cudaMalloc((void**)&d_img, numBytesImg * n_bin);
+cudaMalloc((void**)&d_img, numBytesImg);
 cudaMalloc((void**)&d_img1, numBytesImg);
 cudaStat = cudaMalloc3DArray(&array_img, &channelDesc, extent_img);
 if (cudaStat != cudaSuccess) {
@@ -553,40 +553,39 @@ copyParams.kind = cudaMemcpyDeviceToDevice;
 // for (int i = 0; i < n_iter; i++)
 //     mexPrintf("=");mexEvalString("drawnow;");
 // mexPrintf("\n");mexEvalString("drawnow;");
-cudaMemcpy(d_img, h_img, numBytesImg * n_bin, cudaMemcpyHostToDevice);
+// cudaMemcpy(d_img, h_img, numBytesImg, cudaMemcpyHostToDevice);
+for (int ibin = 0; ibin < n_bin; ibin++){
+    if (ibin < 1){
+        cudaMemcpy(d_img, h_img, numBytesImg, cudaMemcpyHostToDevice);
+    }
+    else{
+    //     // cudaMemcpy(d_img1, h_img, numBytesImg, cudaMemcpyHostToDevice);
+        volume = ref_volumes[ibin];
+        flow = ref_flows[ibin];
+        kernel_forwardDVF<<<gridSize_img, blockSize>>>(d_mx, d_my, d_mz, tex_alpha_x, tex_alpha_y, tex_alpha_z, tex_beta_x, tex_beta_y, tex_beta_z, volume, flow, nx, ny, nz);
+        cudaDeviceSynchronize();
 
-for (int iter = 0; iter < n_iter; iter++){ // iteration
-    // mexPrintf("x");mexEvalString("drawnow;");
-    for (int ibin = 0; ibin < n_bin; ibin++){
-        processBar(iter, n_iter, ibin, n_bin);
+        // copy img to pitched pointer and bind it to a texture object
+        cudaPitchedPtr dp_img = make_cudaPitchedPtr((void*) d_img1, nx * sizeof(float), nx, ny);
+        copyParams.srcPtr = dp_img;
+        copyParams.dstArray = array_img;
+        cudaStat = cudaMemcpy3D(&copyParams);   
+        if (cudaStat != cudaSuccess) {
+            mexPrintf("Failed to copy dp_img to array memory array_img.\n");
+            mexPrintf("Error code %d: %s\n",cudaStat,cudaGetErrorString(cudaStat));
+                mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
+        }
+        resDesc.res.array.array = array_img;
+        cudaCreateTextureObject(&tex_img, &resDesc, &texDesc, NULL);
+
+        kernel_deformation<<<gridSize_img, blockSize>>>(d_img, tex_img, d_mx, d_my, d_mz, nx, ny, nz);
+        cudaDeviceSynchronize();
+    }
+    for (int iter = 0; iter < n_iter; iter++){ // iteration
+        processBar(ibin, n_bin, iter, n_iter);
         // initial guesses of each bin
         // mexPrintf("Dealing with ibin = %d.\n", ibin); mexEvalString("drawnow;");
-        // if (ibin < 1){
-        //     cudaMemcpy(d_img, h_img, numBytesImg, cudaMemcpyHostToDevice);
-        // }
-        // else{
-        //     // cudaMemcpy(d_img1, h_img, numBytesImg, cudaMemcpyHostToDevice);
-        //     volume = ref_volumes[ibin];
-        //     flow = ref_flows[ibin];
-        //     kernel_forwardDVF<<<gridSize_img, blockSize>>>(d_mx, d_my, d_mz, tex_alpha_x, tex_alpha_y, tex_alpha_z, tex_beta_x, tex_beta_y, tex_beta_z, volume, flow, nx, ny, nz);
-        //     cudaDeviceSynchronize();
-
-        //     // copy img to pitched pointer and bind it to a texture object
-        //     cudaPitchedPtr dp_img = make_cudaPitchedPtr((void*) d_img1, nx * sizeof(float), nx, ny);
-        //     copyParams.srcPtr = dp_img;
-        //     copyParams.dstArray = array_img;
-        //     cudaStat = cudaMemcpy3D(&copyParams);   
-        //     if (cudaStat != cudaSuccess) {
-        //         mexPrintf("Failed to copy dp_img to array memory array_img.\n");
-        //         mexPrintf("Error code %d: %s\n",cudaStat,cudaGetErrorString(cudaStat));
-        //             mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
-        //     }
-        //     resDesc.res.array.array = array_img;
-        //     cudaCreateTextureObject(&tex_img, &resDesc, &texDesc, NULL);
-
-        //     kernel_deformation<<<gridSize_img, blockSize>>>(d_img, tex_img, d_mx, d_my, d_mz, nx, ny, nz);
-        //     cudaDeviceSynchronize();
-        // }
+        
         for (int i_view = n_views[ibin]; i_view < n_views[ibin + 1]; i_view++){ // view
         
             angle = angles[i_view];
@@ -675,7 +674,7 @@ for (int iter = 0; iter < n_iter; iter++){ // iteration
             cudaCreateTextureObject(&tex_mz2, &resDesc, &texDesc, NULL);
 
             // copy img to pitched pointer and bind it to a texture object
-            cudaPitchedPtr dp_img = make_cudaPitchedPtr((void*) d_img + ibin * numBytesImg, nx * sizeof(float), nx, ny);
+            cudaPitchedPtr dp_img = make_cudaPitchedPtr((void*) d_img, nx * sizeof(float), nx, ny);
             copyParams.srcPtr = dp_img;
             copyParams.dstArray = array_img;
             cudaStat = cudaMemcpy3D(&copyParams);   
@@ -753,17 +752,16 @@ for (int iter = 0; iter < n_iter; iter++){ // iteration
             // mexPrintf("12");mexEvalString("drawnow;");
 
             // updating
-            kernel_update<<<gridSize_img, blockSize>>>(d_img + ibin * numImg, d_singleViewImg2, nx, ny, nz, lambda);
+            kernel_update<<<gridSize_img, blockSize>>>(d_img, d_singleViewImg2, nx, ny, nz, lambda);
             cudaDeviceSynchronize();          
             // mexPrintf("13");mexEvalString("drawnow;");
-        }
-        // if (ibin == 0){
-        // cudaMemcpy(d_img1, d_img, numBytesImg, cudaMemcpyDeviceToDevice);
-        // }   
+        }  
     }
-    // mexPrintf("\n");mexEvalString("drawnow;");
+    if (ibin == 0){
+        cudaMemcpy(d_img1, d_img, numBytesImg, cudaMemcpyDeviceToDevice);
+    } 
+    cudaMemcpy(h_outimg + ibin * numImg, d_img, numBytesImg, cudaMemcpyDeviceToHost);    
 }
-cudaMemcpy(h_outimg, d_img, numBytesImg * n_bin, cudaMemcpyDeviceToHost);    
 
 
 
