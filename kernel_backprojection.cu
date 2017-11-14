@@ -126,20 +126,20 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
 	// int b_ind_min = (int)floorf(b_min / db - bi);
 
 	float bin_bound_1, bin_bound_2, wa, wb;
-	for (int ia = MAX(0, a_ind_min); ia <= MIN(na - 1, a_ind_max); ia ++){
-		// bin_bound_1 = ((float)ia + ai - 0.5f) * da;
-		// bin_bound_2 = ((float)ia + ai + 0.5f) * da;
+	for (int ia = MAX(0, a_ind_min); ia <= MIN((na - 1), a_ind_max); ia ++){
+		// bin_bound_1 = ((float)ia + ai) * da;
+		// bin_bound_2 = ((float)ia + ai + 1.0f) * da;
 		bin_bound_1 = ia + 0.0f;
 		bin_bound_2 = ia + 1.0f;
 		
 		wa = MIN(bin_bound_2, a_max) - MAX(bin_bound_1, a_min);// wa /= da;
 
-		for (int ib = MAX(0, b_ind_min); ib <= MIN(nb - 1, b_ind_max); ib ++){
-			// bin_bound_1 = ((float)ib + bi - 0.5f) * db;
-			// bin_bound_2 = ((float)ib + bi + 0.5f) * db;
+		for (int ib = MAX(0, b_ind_min); ib <= MIN((nb - 1), b_ind_max); ib ++){
+			// bin_bound_1 = ((float)ib + bi) * db;
+			// bin_bound_2 = ((float)ib + bi + 1.0f) * db;
 			bin_bound_1 = ib + 0.0f;
 			bin_bound_2 = ib + 1.0f;
-			wb = MIN(bin_bound_2, b_max) - MAX(bin_bound_1, b_min); // wb /= db;
+			wb = MIN(bin_bound_2, b_max) - MAX(bin_bound_1, b_min);// wb /= db;
 			// img[id] = tex3D<float>(tex_proj, (ib + 0.5f), (ia + 0.5f), 0.5f);
 			// return;		
 
