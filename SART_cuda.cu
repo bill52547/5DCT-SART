@@ -538,46 +538,55 @@ cudaTextureObject_t tex_mx = 0, tex_my = 0, tex_mz = 0, tex_mx2 = 0, tex_my2 = 0
 // setup output images
 OUT_IMG = mxCreateNumericMatrix(0, 0, mxSINGLE_CLASS, mxREAL);
 const mwSize outDim[4] = {(mwSize)nx, (mwSize)ny, (mwSize)nz, (mwSize)n_bin};
-
 mxSetDimensions(OUT_IMG, outDim, 4);
 mxSetData(OUT_IMG, mxMalloc(numBytesImg * n_bin));
 float *h_outimg = (float*)mxGetData(OUT_IMG);
+
+// OUT_ERR = mxCreateNumericMatrix(0, 0, mxSINGLE_CLASS, mxREAL);
+// const mwSize outDim[1] = {(mwSize)n_iter};
+// mxSetDimensions(OUT_ERR, outDim, 1);
+// mxSetData(OUT_ERR, mxMalloc(n_iter * sizeof(float)));
+// float *h_outerr = (float*)mxGetData(OUT_ERR);
+
 copyParams.kind = cudaMemcpyDeviceToDevice;
 
-for (int ibin = 0; ibin < n_bin; ibin++){
-    // initial guesses of each bin
-    mexPrintf("Dealing with ibin = %d.\n", ibin); mexEvalString("drawnow;");
-    if (ibin < 1){
-        cudaMemcpy(d_img, h_img, numBytesImg, cudaMemcpyHostToDevice);
-    }
-    else{
-        // cudaMemcpy(d_img1, h_img, numBytesImg, cudaMemcpyHostToDevice);
-        volume = ref_volumes[ibin];
-        flow = ref_flows[ibin];
-        kernel_forwardDVF<<<gridSize_img, blockSize>>>(d_mx, d_my, d_mz, tex_alpha_x, tex_alpha_y, tex_alpha_z, tex_beta_x, tex_beta_y, tex_beta_z, volume, flow, nx, ny, nz);
-        cudaDeviceSynchronize();
 
-        // copy img to pitched pointer and bind it to a texture object
-        cudaPitchedPtr dp_img = make_cudaPitchedPtr((void*) d_img1, nx * sizeof(float), nx, ny);
-        copyParams.srcPtr = dp_img;
-        copyParams.dstArray = array_img;
-        cudaStat = cudaMemcpy3D(&copyParams);   
-        if (cudaStat != cudaSuccess) {
-            mexPrintf("Failed to copy dp_img to array memory array_img.\n");
-            mexPrintf("Error code %d: %s\n",cudaStat,cudaGetErrorString(cudaStat));
-                mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
+// for (int i = 0; i < n_iter; i++)
+//     mexPrintf("=");mexEvalString("drawnow;");
+// mexPrintf("\n");mexEvalString("drawnow;");
+
+for (int iter = 0; iter < n_iter; iter++){ // iteration
+    // mexPrintf("x");mexEvalString("drawnow;");
+    for (int ibin = 0; ibin < n_bin; ibin++){
+        processBar(iter, n_iter, ibin, n_bin);
+        // initial guesses of each bin
+        // mexPrintf("Dealing with ibin = %d.\n", ibin); mexEvalString("drawnow;");
+        if (ibin < 1){
+            cudaMemcpy(d_img, h_img, numBytesImg, cudaMemcpyHostToDevice);
         }
-        resDesc.res.array.array = array_img;
-        cudaCreateTextureObject(&tex_img, &resDesc, &texDesc, NULL);
+        else{
+            // cudaMemcpy(d_img1, h_img, numBytesImg, cudaMemcpyHostToDevice);
+            volume = ref_volumes[ibin];
+            flow = ref_flows[ibin];
+            kernel_forwardDVF<<<gridSize_img, blockSize>>>(d_mx, d_my, d_mz, tex_alpha_x, tex_alpha_y, tex_alpha_z, tex_beta_x, tex_beta_y, tex_beta_z, volume, flow, nx, ny, nz);
+            cudaDeviceSynchronize();
 
-        kernel_deformation<<<gridSize_img, blockSize>>>(d_img, tex_img, d_mx, d_my, d_mz, nx, ny, nz);
-        cudaDeviceSynchronize();
-    }
-    for (int i = 0; i < n_iter; i++)
-        mexPrintf("=");mexEvalString("drawnow;");
-    mexPrintf("\n");mexEvalString("drawnow;");
-    for (int iter = 0; iter < n_iter; iter++){ // iteration
-        mexPrintf("x");mexEvalString("drawnow;");
+            // copy img to pitched pointer and bind it to a texture object
+            cudaPitchedPtr dp_img = make_cudaPitchedPtr((void*) d_img1, nx * sizeof(float), nx, ny);
+            copyParams.srcPtr = dp_img;
+            copyParams.dstArray = array_img;
+            cudaStat = cudaMemcpy3D(&copyParams);   
+            if (cudaStat != cudaSuccess) {
+                mexPrintf("Failed to copy dp_img to array memory array_img.\n");
+                mexPrintf("Error code %d: %s\n",cudaStat,cudaGetErrorString(cudaStat));
+                    mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
+            }
+            resDesc.res.array.array = array_img;
+            cudaCreateTextureObject(&tex_img, &resDesc, &texDesc, NULL);
+
+            kernel_deformation<<<gridSize_img, blockSize>>>(d_img, tex_img, d_mx, d_my, d_mz, nx, ny, nz);
+            cudaDeviceSynchronize();
+        }
         for (int i_view = n_views[ibin]; i_view < n_views[ibin + 1]; i_view++){ // view                    
             // mexPrintf("i_view = %d.\n", i_view);        
             angle = angles[i_view];
@@ -694,7 +703,7 @@ for (int ibin = 0; ibin < n_bin; ibin++){
 
             kernel_add<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_proj, 0, na, nb, -1);
             cudaDeviceSynchronize();
-
+    
             // backprojecting the difference of projections
             // print parameters              
             kernel_backprojection(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
@@ -731,6 +740,7 @@ for (int ibin = 0; ibin < n_bin; ibin++){
 
             // kernel_backprojection<<<gridSize_img, blockSize>>>(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
             // cudaDeviceSynchronize();
+
             kernel_backprojection(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
 
             // mexPrintf("11");mexEvalString("drawnow;");
@@ -745,15 +755,12 @@ for (int ibin = 0; ibin < n_bin; ibin++){
             cudaDeviceSynchronize();          
             // mexPrintf("13");mexEvalString("drawnow;");
         }
-    }
-    if (ibin == 0){
-        // kernel_update<<<gridSize_img, blockSize>>>(d_img1, d_img, nx, ny, nz, -1);
-        // cudaDeviceSynchronize();
+        if (ibin == 0){
         cudaMemcpy(d_img1, d_img, numBytesImg, cudaMemcpyDeviceToDevice);
     }
-    cudaMemcpy(h_outimg + ibin * numImg, d_img, numBytesImg, cudaMemcpyDeviceToHost);
-    // h_outimg[0] = 0.1f;
-    mexPrintf("\n");mexEvalString("drawnow;");
+    cudaMemcpy(h_outimg + ibin * numImg, d_img, numBytesImg, cudaMemcpyDeviceToHost);    
+    }
+    // mexPrintf("\n");mexEvalString("drawnow;");
 }
 
 

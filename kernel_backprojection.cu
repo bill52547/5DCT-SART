@@ -73,9 +73,9 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
 
 	// voxel boundary coordinates
 	float xl, yl, zl, xr, yr, zr, xt, yt, zt, xb, yb, zb;
-	xl = xc * cphi + yc * sphi;// - 0.5f;
+	xl = xc * cphi + yc * sphi - 0.5f;
     yl = -xc * sphi + yc * cphi - 0.5f;
-    xr = xc * cphi + yc * sphi;// + 0.5f;
+    xr = xc * cphi + yc * sphi + 0.5f;
     yr = -xc * sphi + yc * cphi + 0.5f;
     zl = zc; zr = zc;
     xt = xc * cphi + yc * sphi;
