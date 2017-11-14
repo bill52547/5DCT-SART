@@ -1,14 +1,23 @@
-__global__ void kernel_deformation(float *img1, cudaTextureObject_t tex_img, float *my2, float *mx2, float *mz2, int nx, int ny, int nz){
+__global__ void kernel_deformation(float *img1, cudaTextureObject_t tex_img, float *mx2, float *my2, float *mz2, int nx, int ny, int nz){
     int ix = 16 * blockIdx.x + threadIdx.x;
     int iy = 16 * blockIdx.y + threadIdx.y;
     int iz = 4 * blockIdx.z + threadIdx.z;
     if (ix >= nx || iy >= ny || iz >= nz)
         return;
     int id = iy + ix * ny + iz * nx * ny;
-    float xi = iy + 1.0f + mx2[id];
-    float yi = ix + 1.0f + my2[id];
+    float xi = iy + 1.0f + my2[id];
+    float yi = ix + 1.0f + mx2[id];
     float zi = iz + 1.0f + mz2[id];
     img1[id] = tex3D<float>(tex_img, xi - 0.5f, yi - 0.5f, zi - 0.5f);
+
+    // int id = ix + iy * nx + iz * nx * ny; // index for image
+    // int id2 = iy + ix * ny + iz * nx * ny; // index for DVFs
+    // float xi = iy + 0.5f + my2[id2];
+    // float yi = ix + 0.5f + mx2[id2];
+    // float zi = iz + 0.5f + mz2[id2];
+    // img1[id2] = tex3D<float>(tex_img, xi, yi, zi);
+
+
     // img1[id] = 0.0f;
     // if (xi < 0.5f || xi >= nx - 0.5f || yi < 0.5f || yi >= ny - 0.5f || zi < 0.5f || zi >= nz - 0.5f)
     //     return;

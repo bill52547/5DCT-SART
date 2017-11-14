@@ -1,5 +1,7 @@
 // this program is try to do the SART program for a single bin
 // #include "universe_header.h"
+#ifndef _SART_CUDA_H
+#define _SART_CUDA_H
 #include "mex.h"
 #include "matrix.h"
 #include "gpu/mxGPUArray.h"
@@ -7,7 +9,7 @@
 #include <cuda_runtime.h>
 #include <math.h>
 #include <iostream>
-
+#include "cublas_v2.h"
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #define ABS(x) ((x) > 0 ? (x) : -(x))
@@ -28,4 +30,5 @@
 #include "kernel_invertDVF.h" //__global__ kernel_invertedDVF(float *mx2, float *my2, float *mz2, cudaTextureObject_t alpha_x, cudaTextureObject_t alpha_y, cudaTextureObject_t alpha_z, cudaTextureObject_t beta_x, cudaTextureObject_t beta_y, cudaTextureObject_t beta_z, int nx, int ny, int nz, int niter);
 // #include "dist_cuda_functions.h"
 // #include 
-
+#include "processBar.h"
+#endif // _SART_CUDA_H
