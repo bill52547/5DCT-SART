@@ -1,17 +1,20 @@
 #include "processBar.h"
 void processBar(int i1, int n1, int i2, int n2)
 {
-    // clrscr();
-    mexEvalString("clc;");mexEvalString("drawnow;");    
-    mexPrintf("Iter (%d / %d), Frac (%d / %d):\n", i1, n1, i2, n2);mexEvalString("drawnow;");
-    mexPrintf("(%d / %d) \n[", i1 * n2 + i2 + 1, n1 * n2);mexEvalString("drawnow;");
-    for (int i = 0; i < n1 * n2; i++)
+    mexEvalString("clc;");  
+    int N = n1 * n2, step = 1, id = i1 * n2 + i2 + 1;
+    while (N / step > 40)
+        step++;
+    float perc = float(id) * 100 / (N);
+    mexPrintf("%3.1f %% [", perc);
+    for (int i = 0; i < N; i += step)
     {
         if (i <= i1 * n2 + i2)
-        {mexPrintf("=");mexEvalString("drawnow;");}            
+        {mexPrintf("=");}            
         else
-        {mexPrintf("-");mexEvalString("drawnow;");}            
+        {mexPrintf("-");}            
     }
-    mexPrintf("]");mexEvalString("drawnow;");
+    mexPrintf("] step = %d\n", step);
 
+    mexPrintf("Iter (%d / %d), Frac (%d / %d), Total (%d / %d).\n", i1 + 1, n1, i2 + 1, n2, id, N);mexEvalString("drawnow;");
 }
