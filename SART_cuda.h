@@ -9,7 +9,7 @@
 #include <cuda_runtime.h>
 #include <math.h>
 #include <iostream>
-// #include "cublas_v2.h"
+#include "cublas_v2.h"
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #define ABS(x) ((x) > 0 ? (x) : -(x))

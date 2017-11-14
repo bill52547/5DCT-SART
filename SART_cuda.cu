@@ -8,6 +8,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
 #define GEO_PARA prhs[2]
 #define ITER_PARA prhs[3]
 #define OUT_IMG plhs[0]
+// #define OUT_ERR plhs[1]
 
 int nx, ny, nz, na, nb, numImg, numBytesImg, numSingleProj, numBytesSingleProj;
 float da, db, ai, bi, SO, SD, dx;
@@ -542,11 +543,9 @@ mxSetDimensions(OUT_IMG, outDim, 4);
 mxSetData(OUT_IMG, mxMalloc(numBytesImg * n_bin));
 float *h_outimg = (float*)mxGetData(OUT_IMG);
 
-// OUT_ERR = mxCreateNumericMatrix(0, 0, mxSINGLE_CLASS, mxREAL);
-// const mwSize outDim[1] = {(mwSize)n_iter};
-// mxSetDimensions(OUT_ERR, outDim, 1);
-// mxSetData(OUT_ERR, mxMalloc(n_iter * sizeof(float)));
-// float *h_outerr = (float*)mxGetData(OUT_ERR);
+// OUT_ERR = mxCreateNumericMatrix(n_iter, 1, mxSINGLE_CLASS, mxREAL);
+// float *h_outerr = (float*)mxGetData(OUT_ERR), temp_err[1];
+// cublasHandle_t handle;
 
 copyParams.kind = cudaMemcpyDeviceToDevice;
 
@@ -561,34 +560,35 @@ for (int iter = 0; iter < n_iter; iter++){ // iteration
         processBar(iter, n_iter, ibin, n_bin);
         // initial guesses of each bin
         // mexPrintf("Dealing with ibin = %d.\n", ibin); mexEvalString("drawnow;");
-        if (ibin < 1){
-            cudaMemcpy(d_img, h_img, numBytesImg, cudaMemcpyHostToDevice);
-        }
-        else{
-            // cudaMemcpy(d_img1, h_img, numBytesImg, cudaMemcpyHostToDevice);
-            volume = ref_volumes[ibin];
-            flow = ref_flows[ibin];
-            kernel_forwardDVF<<<gridSize_img, blockSize>>>(d_mx, d_my, d_mz, tex_alpha_x, tex_alpha_y, tex_alpha_z, tex_beta_x, tex_beta_y, tex_beta_z, volume, flow, nx, ny, nz);
-            cudaDeviceSynchronize();
+        // if (ibin < 1){
+        //     cudaMemcpy(d_img, h_img, numBytesImg, cudaMemcpyHostToDevice);
+        // }
+        // else{
+        //     // cudaMemcpy(d_img1, h_img, numBytesImg, cudaMemcpyHostToDevice);
+        //     volume = ref_volumes[ibin];
+        //     flow = ref_flows[ibin];
+        //     kernel_forwardDVF<<<gridSize_img, blockSize>>>(d_mx, d_my, d_mz, tex_alpha_x, tex_alpha_y, tex_alpha_z, tex_beta_x, tex_beta_y, tex_beta_z, volume, flow, nx, ny, nz);
+        //     cudaDeviceSynchronize();
 
-            // copy img to pitched pointer and bind it to a texture object
-            cudaPitchedPtr dp_img = make_cudaPitchedPtr((void*) d_img1, nx * sizeof(float), nx, ny);
-            copyParams.srcPtr = dp_img;
-            copyParams.dstArray = array_img;
-            cudaStat = cudaMemcpy3D(&copyParams);   
-            if (cudaStat != cudaSuccess) {
-                mexPrintf("Failed to copy dp_img to array memory array_img.\n");
-                mexPrintf("Error code %d: %s\n",cudaStat,cudaGetErrorString(cudaStat));
-                    mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
-            }
-            resDesc.res.array.array = array_img;
-            cudaCreateTextureObject(&tex_img, &resDesc, &texDesc, NULL);
+        //     // copy img to pitched pointer and bind it to a texture object
+        //     cudaPitchedPtr dp_img = make_cudaPitchedPtr((void*) d_img1, nx * sizeof(float), nx, ny);
+        //     copyParams.srcPtr = dp_img;
+        //     copyParams.dstArray = array_img;
+        //     cudaStat = cudaMemcpy3D(&copyParams);   
+        //     if (cudaStat != cudaSuccess) {
+        //         mexPrintf("Failed to copy dp_img to array memory array_img.\n");
+        //         mexPrintf("Error code %d: %s\n",cudaStat,cudaGetErrorString(cudaStat));
+        //             mexErrMsgIdAndTxt("MATLAB:cudaFail","SART failed.\n");
+        //     }
+        //     resDesc.res.array.array = array_img;
+        //     cudaCreateTextureObject(&tex_img, &resDesc, &texDesc, NULL);
 
-            kernel_deformation<<<gridSize_img, blockSize>>>(d_img, tex_img, d_mx, d_my, d_mz, nx, ny, nz);
-            cudaDeviceSynchronize();
-        }
-        for (int i_view = n_views[ibin]; i_view < n_views[ibin + 1]; i_view++){ // view                    
-            // mexPrintf("i_view = %d.\n", i_view);        
+        //     kernel_deformation<<<gridSize_img, blockSize>>>(d_img, tex_img, d_mx, d_my, d_mz, nx, ny, nz);
+        //     cudaDeviceSynchronize();
+        // }
+        cudaMemcpy(d_img, h_img + ibin * numImg, numBytesImg, cudaMemcpyHostToDevice);
+        for (int i_view = n_views[ibin]; i_view < n_views[ibin + 1]; i_view++){ // view
+        
             angle = angles[i_view];
             volume = ref_volumes[ibin] - volumes[i_view];
             flow = ref_flows[ibin] - flows[i_view];
@@ -703,7 +703,9 @@ for (int iter = 0; iter < n_iter; iter++){ // iteration
 
             kernel_add<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_proj, 0, na, nb, -1);
             cudaDeviceSynchronize();
-    
+            // cublasSnrm2_v2(handle, na * nb, d_singleViewProj2, 1, temp_err);
+            // h_outerr[iter] += temp_err[0];
+
             // backprojecting the difference of projections
             // print parameters              
             kernel_backprojection(d_singleViewImg1, d_singleViewProj2, angle, SO, SD, da, na, ai, db, nb, bi, nx, ny, nz);
