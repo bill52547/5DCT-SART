@@ -1,7 +1,9 @@
 #include <math.h>
 #define ABS(x) ((x) > 0 ? (x) : - (x))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
-
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX4(a, b, c, d) MAX(MAX(a, b), MAX(c, d))
+#define MIN4(a, b, c, d) MIN(MIN(a, b), MIN(c, d))
 __global__ void kernel_projection(float *proj, float *img, float angle, float SO, float SD, float da, int na, float ai, float db, int nb, float bi, int nx, int ny, int nz){
     int ia = 16 * blockIdx.x + threadIdx.x;
     int ib = 16 * blockIdx.y + threadIdx.y;
@@ -27,176 +29,109 @@ __global__ void kernel_projection(float *proj, float *img, float angle, float SO
 
     // y - z plane, where ABS(x21) > ABS(y21)
     if (ABS(x21) > ABS(y21)){
-        float yi1, yi2, ky1, ky2, zi1, zi2, kz1, kz2;
+    // if (ABS(cphi) > ABS(sphi)){
+        float yi1, yi2, zi1, zi2;
         int Yi1, Yi2, Zi1, Zi2;
         // for each y - z plane, we calculate and add the contribution of related pixels
         for (int ix = 0; ix < nx; ix++){
             // calculate y indices of intersecting voxel candidates
-            ky1 = (y21 - da / 2 * cphi) / (x21 + da / 2 * sphi);
-            yi1 = ky1 * ((float)ix + 0.5f - x1 - nx / 2) + y1 + ny / 2;
-            Yi1 = (int)floor(yi1); // lower boundary of related voxels at y-axis
-            ky2 = (y21 + da / 2 * cphi) / (x21 - da / 2 * sphi);
-            yi2 = ky2 * ((float)ix + 0.5f - x1 - nx / 2) + y1 + ny / 2;
-            Yi2 = (int)floor(yi2); // upper boundary of related voxels at y-axis
-            // if (Yi1 < 0)
-            //     Yi1 = 0;
-            // if (Yi2 >= ny)
-            //     Yi2 = ny - 1;
+            float xl, xr, yl, yr, ratio;
+            float cyll, cylr, cyrl, cyrr, xc;
+            xl = x21 - da / 2 * sphi;
+            xr = x21 + da / 2 * sphi;
+            yl = y21 - da / 2 * cphi;
+            yr = y21 + da / 2 * cphi;
+            xc = (float)ix + 0.5f - (float)nx / 2 - x1;
+            
+            ratio = yl / xl;
+            cyll = ratio * xc + y1 + ny / 2;
+            ratio = yl / xr;
+            cylr = ratio * xc + y1 + ny / 2;
+            ratio = yr / xl;
+            cyrl = ratio * xc + y1 + ny / 2;
+            ratio = yr / xr;
+            cyrr = ratio * xc + y1 + ny / 2;
 
-            // calculate z indices of intersecting voxel candidates
-            kz1 = (z21 - db / 2) / x21;
-            zi1 = kz1 * ((float)ix + da * 0.5f - x1 - nx / 2) + z1 + nz / 2;
-            Zi1 = (int)floor(zi1); // lower boundary of related voxels at y-axis
-            kz2 = (z21 + db / 2) / x21;
-            zi2 = kz2 * ((float)ix + da * 0.5f - x1 - nx / 2) + z1 + nz / 2;
-            Zi2 = (int)floor(zi2); // upper boundary of related voxels at y-axis
-            // if (Zi1 < 0)
-            //     Zi1 = 0;
-            // if (Zi2 >= nz)
-            //     Zi2 = nz - 1;
+            yi1 = MIN4(cyll, cylr, cyrl, cyrr); Yi1 = (int)floorf(yi1);
+            yi2 = MAX4(cyll, cylr, cyrl, cyrr); Yi2 = (int)floorf(yi2);
 
-            // calculate contribution of a voxel to the projection value
-            int iy, iz;
-            float wy1, wy2, wz1, wz2;
-            wy1 = (MAX(Yi1, Yi2) - yi1) / (yi2 - yi1); wy2 = 1 - wy1;
-            wz1 = (MAX(Zi1, Zi2) - zi1) / (zi2 - zi1); wz2 = 1 - wz1;
+            float zl, zr, czl, czr;
+            zl = z21 - db / 2;
+            zr = z21 + db / 2;
+            xc = (float)ix + 0.5f - (float)nx / 2 - x1 ;
 
-            // Yi1 == Yi2 && Zi1 == Zi2
-            if (Yi1 == Yi2 && Zi1 == Zi2)
+            ratio = zl / x21;
+            czl = ratio * xc + z1 + nz / 2;
+            ratio = zr / x21;
+            czr = ratio * xc + z1 + nz / 2;
+
+            zi1 = MIN(czl, czr); Zi1 = (int)floorf(zi1);
+            zi2 = MAX(czl, czr); Zi2 = (int)floorf(zi2);
+
+            float wy, wz;
+
+            for (int iy = MAX(0, Yi1); iy <= MIN(ny - 1, Yi2); iy++)
             {
-                iy = Yi1; iz = Zi1; 
-                if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * 1.0f;
-                continue;
-            }
-            // Yi1 != Yi2 && Zi1 == Zi2
-            if (Yi1 != Yi2 && Zi1 == Zi2)
-            {
-                iy = Yi1; iz = Zi1; 
-                if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wy1;
-                iy = Yi2; iz = Zi1; 
-                if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wy2;
-                continue;                
-            }
-            // Yi1 == Yi2 && Zi1 != Zi2
-            if (Yi1 == Yi2 && Zi1 != Zi2)
-            {
-                iy = Yi1; iz = Zi1; 
-                if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wz1;
-                iy = Yi1; iz = Zi2; 
-                if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wz2;
-                continue;                
-            }
-            // Yi1 != Yi2 && Zi1 != Zi2
-            if (Yi1 != Yi2 && Zi1 != Zi2)
-            {
-                iy = Yi1; iz = Zi1; 
-                if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wy1 * wz1;
-                iy = Yi1; iz = Zi2; 
-                if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wy1 * wz2;
-                iy = Yi2; iz = Zi1; 
-                if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wy2 * wz1;
-                iy = Yi2; iz = Zi2; 
-                if (iy < ny && iy >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wy2 * wz2;
-                continue;                
-            }
+                wy = MIN(iy + 1.0f, yi2) - MAX(iy + 0.0f, yi1); wy /= (yi2 - yi1);
+                for (int iz = MAX(0, Zi1); iz <= MIN(nz - 1, Zi2); iz++)
+                {
+                    wz = MIN(iz + 1.0f, zi2) - MAX(iz + 0.0f, zi1); wz /= (zi2 - zi1);
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wy * wz;
+                }                
+            }        
         }
     }
     // x - z plane, where ABS(x21) <= ABS(y21)    
     else{
-    float xi1, xi2, kx1, kx2, zi1, zi2, kz1, kz2;
+        float xi1, xi2, zi1, zi2;
         int Xi1, Xi2, Zi1, Zi2;
         // for each y - z plane, we calculate and add the contribution of related pixels
         for (int iy = 0; iy < ny; iy++){
             // calculate y indices of intersecting voxel candidates
-            kx1 = (x21 - da / 2 * sphi) / (y21 + da / 2 * cphi);
-            xi1 = kx1 * ((float)iy + 0.5f - y1 - ny / 2) + x1 + nx / 2;
-            Xi1 = (int)floor(xi1); // lower boundary of related voxels at y-axis
-            kx2 = (x21 + da / 2 * sphi) / (y21 - da / 2 * cphi);
-            xi2 = kx2 * ((float)iy + 0.5f - y1 - ny / 2) + x1 + nx / 2;
-            Xi2 = (int)floor(xi2); // upper boundary of related voxels at y-axis
-            // if (Xi1 < 0)
-            //     Xi1 = 0;
-            // if (Xi2 >= ny)
-            //     Xi2 = ny - 1;
+            float yl, yr, xl, xr, ratio;
+            float cxll, cxlr, cxrl, cxrr, yc;
+            yl = y21 - da / 2 * cphi;
+            yr = y21 + da / 2 * cphi;
+            xl = x21 - da / 2 * sphi;
+            xr = x21 + da / 2 * sphi;
+            yc = (float)iy + 0.5f - (float)ny / 2 - y1;
+            
+            ratio = xl / yl;
+            cxll = ratio * yc + x1 + nx / 2;
+            ratio = xl / yr;
+            cxlr = ratio * yc + x1 + nx / 2;
+            ratio = xr / yl;
+            cxrl = ratio * yc + x1 + nx / 2;
+            ratio = xr / yr;
+            cxrr = ratio * yc + x1 + nx / 2;
 
-            // calculate z indices of intersecting voxel candidates
-            kz1 = (z21 - db / 2) / y21;
-            zi1 = kz1 * ((float)iy + da * 0.5f - y1 - ny / 2) + z1 + nz / 2;
-            Zi1 = (int)floor(zi1); // lower boundary of related voxels at y-axis
-            kz2 = (z21 + db / 2) / y21;
-            zi2 = kz2 * ((float)iy + da * 0.5f - y1 - ny / 2) + z1 + nz / 2;
-            Zi2 = (int)floor(zi2); // upper boundary of related voxels at y-axis
-            // if (Zi1 < 0)
-            //     Zi1 = 0;
-            // if (Zi2 >= nz)
-            //     Zi2 = nz - 1;
+            xi1 = MIN4(cxll, cxlr, cxrl, cxrr); Xi1 = (int)floorf(xi1);
+            xi2 = MAX4(cxll, cxlr, cxrl, cxrr); Xi2 = (int)floorf(xi2);
 
-            // calculate contribution of a voxel to the projection value
-            int ix, iz;
-            float wx1, wx2, wz1, wz2;
-            wx1 = (MAX(Xi1, Xi2) - xi1) / (xi2 - xi1); wx2 = 1 - wx1;
-            wz1 = (MAX(Zi1, Zi2) - zi1) / (zi2 - zi1); wz2 = 1 - wz1;
+            float zl, zr, czl, czr;
+            zl = z21 - db / 2;
+            zr = z21 + db / 2;
+            yc = (float)iy + 0.5f - (float)ny / 2 - y1;
 
-            // Xi1 == Xi2 && Zi1 == Zi2
-            if (Xi1 == Xi2 && Zi1 == Zi2)
+            ratio = zl / y21;
+            czl = ratio * yc + z1 + nz / 2;
+            ratio = zr / y21;
+            czr = ratio * yc + z1 + nz / 2;
+
+            zi1 = MIN(czl, czr); Zi1 = (int)floorf(zi1);
+            zi2 = MAX(czl, czr); Zi2 = (int)floorf(zi2);
+
+            float wx, wz;
+
+            for (int ix = MAX(0, Xi1); ix <= MIN(nx - 1, Xi2); ix++)
             {
-                ix = Xi1; iz = Zi1; 
-                if (ix < nx && ix >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * 1.0f;
-                continue;
-            }
-            // Xi1 != Xi2 && Zi1 == Zi2
-            if (Xi1 != Xi2 && Zi1 == Zi2)
-            {
-                ix = Xi1; iz = Zi1; 
-                if (ix < nx && ix >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wx1;
-                ix = Xi2; iz = Zi1; 
-                if (ix < nx && ix >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wx2;
-                continue;                
-            }
-            // Xi1 == Xi2 && Zi1 != Zi2
-            if (Xi1 == Xi2 && Zi1 != Zi2)
-            {
-                ix = Xi1; iz = Zi1; 
-                if (ix < nx && ix >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wz1;
-                ix = Xi1; iz = Zi2; 
-                if (ix < nx && ix >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wz2;
-                continue;                
-            }
-            // Xi1 != Xi2 && Zi1 != Zi2
-            if (Xi1 != Xi2 && Zi1 != Zi2)
-            {
-                ix = Xi1; iz = Zi1; 
-                if (ix < nx && ix >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wx1 * wz1;
-                ix = Xi1; iz = Zi2; 
-                if (ix < nx && ix >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wx1 * wz2;
-                ix = Xi2; iz = Zi1; 
-                if (ix < nx && ix >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wx2 * wz1;
-                ix = Xi2; iz = Zi2; 
-                if (ix < nx && ix >= 0 && iz < nz && iz >= 0)
-                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wx2 * wz2;
-                continue;                
-            }
-        }
+                wx = MIN(ix + 1.0f, xi2) - MAX(ix + 0.0f, xi1); wx /= (xi2 - xi1);
+                for (int iz = MAX(0, Zi1); iz <= MIN(nz - 1, Zi2); iz++)
+                {
+                    wz = MIN(iz + 1.0f, zi2) - MAX(iz + 0.0f, zi1); wz /= (zi2 - zi1);
+                    proj[id] += img[ix + iy * nx + iz * nx * ny] * wx * wz;
+                }                
+            }        
+        }            
     }
-
-        
-
-    
 }

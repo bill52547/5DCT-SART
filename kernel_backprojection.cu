@@ -72,12 +72,17 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
 	zc = (float)iz - nz / 2 + 0.5f;
 
 	// voxel boundary coordinates
-	float xl, yl, zl, xr, yr, zr, xt, yt, zt, xb, yb, zb;
-	xl = xc * cphi + yc * sphi - 0.5f;
-    yl = -xc * sphi + yc * cphi - 0.5f;
-    xr = xc * cphi + yc * sphi + 0.5f;
-    yr = -xc * sphi + yc * cphi + 0.5f;
-    zl = zc; zr = zc;
+	float xll, yll, zll, xlr, ylr, zlr, xrl, yrl, zrl, xrr, yrr, zrr, xt, yt, zt, xb, yb, zb;
+	xll = xc * cphi + yc * sphi - 0.5f;
+    yll = -xc * sphi + yc * cphi - 0.5f;
+    xrr = xc * cphi + yc * sphi + 0.5f;
+    yrr = -xc * sphi + yc * cphi + 0.5f;
+    zll = zc; zrr = zc;
+	xrl = xc * cphi + yc * sphi + 0.5f;
+    yrl = -xc * sphi + yc * cphi - 0.5f;
+    xlr = xc * cphi + yc * sphi - 0.5f;
+    ylr = -xc * sphi + yc * cphi + 0.5f;
+    zrl = zc; zlr = zc;
     xt = xc * cphi + yc * sphi;
     yt = -xc * sphi + yc * cphi;
     zt = zc + 0.5f;
@@ -86,17 +91,23 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
     zb = zc - 0.5f;
 
 	// the coordinates of source and detector plane here are after rotation
-	float ratio, al, bl, ar, br, at, bt, ab, bb, a_max, a_min, b_max, b_min;
+	float ratio, all, bll, alr, blr, arl, brl, arr, brr, at, bt, ab, bb, a_max, a_min, b_max, b_min;
 	// calculate a value for each boundary coordinates
 	
 
 	// the a and b here are all absolute positions from isocenter, which are on detector planes
-	ratio = SD / (xl + SO);
-	al = ratio * yl;
-	bl = ratio * zl;
-	ratio = SD / (xr + SO);
-	ar = ratio * yr;
-	br = ratio * zr;
+	ratio = SD / (xll + SO);
+	all = ratio * yll;
+	bll = ratio * zll;
+	ratio = SD / (xrr + SO);
+	arr = ratio * yrr;
+	brr = ratio * zrr;
+	ratio = SD / (xlr + SO);
+	alr = ratio * ylr;
+	blr = ratio * zlr;
+	ratio = SD / (xrl + SO);
+	arl = ratio * yrl;
+	brl = ratio * zrl;
 	ratio = SD / (xt + SO);
 	at = ratio * yt;
 	bt = ratio * zt;
@@ -105,10 +116,14 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
 	bb = ratio * zb;
 
 	// get the max and min values of all boundary projectors of voxel boundaries on detector plane
-	a_max = MAX4(al ,ar, at, ab);
-	a_min = MIN4(al ,ar, at, ab);
-	b_max = MAX4(bl ,br, bt, bb);
-	b_min = MIN4(bl ,br, bt, bb);
+	// a_max = MAX4(al ,ar, at, ab);
+	// a_min = MIN4(al ,ar, at, ab);
+	// b_max = MAX4(bl ,br, bt, bb);
+	// b_min = MIN4(bl ,br, bt, bb);
+	a_max = MAX6(all ,arr, alr, arl, at, ab);
+	a_min = MIN6(all ,arr, alr, arl, at, ab);
+	b_max = MAX6(bll ,brr, blr, brl, bt, bb);
+	b_min = MIN6(bll ,brr, blr, brl, bt, bb);
 
 	// the related positions on detector plane from start points
 	a_max = a_max / da - ai + 0.5f; //  now they are the detector coordinates
@@ -132,6 +147,8 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
 		bin_bound_1 = ia + 0.0f;
 		bin_bound_2 = ia + 1.0f;
 		
+		// wa = MIN(bin_bound_2, a_max) - MAX(bin_bound_1, a_min);// wa /= da;
+
 		wa = MIN(bin_bound_2, a_max) - MAX(bin_bound_1, a_min);// wa /= da;
 
 		for (int ib = MAX(0, b_ind_min); ib <= MIN((nb - 1), b_ind_max); ib ++){
@@ -139,9 +156,9 @@ __global__ void kernel(float *img, cudaTextureObject_t tex_proj, float angle, fl
 			// bin_bound_2 = ((float)ib + bi + 1.0f) * db;
 			bin_bound_1 = ib + 0.0f;
 			bin_bound_2 = ib + 1.0f;
+			// wb = MIN(bin_bound_2, b_max) - MAX(bin_bound_1, b_min);// wb /= db;
 			wb = MIN(bin_bound_2, b_max) - MAX(bin_bound_1, b_min);// wb /= db;
-			// img[id] = tex3D<float>(tex_proj, (ib + 0.5f), (ia + 0.5f), 0.5f);
-			// return;		
+
 
 			img[id] += wa * wb * tex3D<float>(tex_proj, (ia + 0.5f), (ib + 0.5f), 0.5f);
 		}		

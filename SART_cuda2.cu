@@ -8,7 +8,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray const *prhs[])
 #define GEO_PARA prhs[2]
 #define ITER_PARA prhs[3]
 #define OUT_IMG plhs[0]
-#define OUT_ERR plhs[1]
+// #define OUT_ERR plhs[1]
 
 int nx, ny, nz, na, nb, numImg, numBytesImg, numSingleProj, numBytesSingleProj;
 float da, db, ai, bi, SO, SD, dx;
@@ -543,9 +543,9 @@ mxSetDimensions(OUT_IMG, outDim, 4);
 mxSetData(OUT_IMG, mxMalloc(numBytesImg * n_bin));
 float *h_outimg = (float*)mxGetData(OUT_IMG);
 
-OUT_ERR = mxCreateNumericMatrix(n_iter, 1, mxSINGLE_CLASS, mxREAL);
-float *h_outerr = (float*)mxGetData(OUT_ERR), temp_err[1];
-cublasHandle_t handle;
+// OUT_ERR = mxCreateNumericMatrix(n_iter, 1, mxSINGLE_CLASS, mxREAL);
+// float *h_outerr = (float*)mxGetData(OUT_ERR), temp_err[1];
+// cublasHandle_t handle;
 
 copyParams.kind = cudaMemcpyDeviceToDevice;
 
@@ -702,8 +702,8 @@ for (int ibin = 0; ibin < n_bin; ibin++){
 
             kernel_add<<<gridSize_singleProj, blockSize>>>(d_singleViewProj2, d_proj, 0, na, nb, -1);
             cudaDeviceSynchronize();
-            cublasSnrm2_v2(handle, na * nb, d_singleViewProj2, 1, temp_err);
-            h_outerr[iter] += temp_err[0];
+            // cublasSnrm2_v2(handle, na * nb, d_singleViewProj2, 1, temp_err);
+            // h_outerr[iter] += temp_err[0];
 
             // backprojecting the difference of projections
             // print parameters              
