@@ -10,6 +10,8 @@ __global__ void kernel_division(float *img1, float *img, int nx, int ny, int nz)
 
     if (img[id] > 0.01f)
         img1[id] /= img[id];
+    else
+        img1[id] = 0.0f;
 
     // if (isnan(img1[id]))
     //     img1[id] = 0.0f;
