@@ -1,1 +1,0 @@
-__global__ void kernel_add(float *proj1, float *proj, int iv, int na, int nb, float weight);
